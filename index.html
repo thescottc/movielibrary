@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Movie Library</title>
+<style>
+  :root{--bg:#0f1216;--panel:#1a1f27;--panel-2:#232a35;--border:#2d3642;--text:#e6edf3;--muted:#8b98a8;--accent:#4f8cff;--accent-2:#6ee7b7;--danger:#ff6b6b;--warn:#fbbf24;--radius:10px}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);line-height:1.5}
+  header{background:var(--panel);border-bottom:1px solid var(--border);padding:14px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;position:sticky;top:0;z-index:10}
+  header h1{font-size:1.25rem;margin:0}
+  header h1 span{color:var(--accent)}
+  .tabs{display:flex;gap:4px;margin-left:auto;flex-wrap:wrap}
+  .tab{background:transparent;border:1px solid transparent;color:var(--muted);padding:8px 14px;border-radius:var(--radius);cursor:pointer;font-size:.9rem;font-weight:500}
+  .tab:hover{color:var(--text)}
+  .tab.active{background:var(--panel-2);color:var(--text);border-color:var(--border)}
+  .admin-badge{background:var(--accent);color:#fff;font-size:.7rem;padding:2px 8px;border-radius:20px;font-weight:700;display:none}
+  .admin-badge.on{display:inline-block}
+  main{max-width:1200px;margin:0 auto;padding:20px}
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:20px}
+  input,select,textarea,button{font-family:inherit;font-size:.9rem}
+  input[type=text],input[type=date],input[type=number],input[type=email],input[type=url],select,textarea{background:var(--panel);border:1px solid var(--border);color:var(--text);padding:9px 12px;border-radius:var(--radius);outline:none}
+  input:focus,select:focus,textarea:focus{border-color:var(--accent)}
+  .search{flex:1;min-width:200px}
+  button.btn{background:var(--accent);color:#fff;border:none;padding:9px 16px;border-radius:var(--radius);cursor:pointer;font-weight:600}
+  button.btn:hover{filter:brightness(1.1)}
+  button.btn.secondary{background:var(--panel-2);color:var(--text);border:1px solid var(--border)}
+  button.btn.danger{background:var(--danger)}
+  button.btn.small{padding:5px 10px;font-size:.78rem}
+  button.btn:disabled{opacity:.5;cursor:not-allowed}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;display:flex;flex-direction:column;transition:transform .12s,border-color .12s;cursor:pointer}
+  .card:hover{transform:translateY(-2px);border-color:var(--accent)}
+  .cover{aspect-ratio:2/3;background:var(--panel-2);display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:3rem;background-size:cover;background-position:center}
+  .card-body{padding:12px;flex:1;display:flex;flex-direction:column}
+  .card-title{font-weight:700;font-size:.95rem;margin-bottom:2px}
+  .card-meta{font-size:.8rem;color:var(--muted);margin-bottom:8px}
+  .badges{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+  .badge{font-size:.7rem;padding:2px 8px;border-radius:20px;font-weight:600;letter-spacing:.02em}
+  .badge.format{background:#21324a;color:#7fb0ff}
+  .badge.available{background:#10372a;color:var(--accent-2)}
+  .badge.loaned{background:#3d2f0f;color:var(--warn)}
+  .card-actions{display:flex;gap:6px;margin-top:auto}
+  .card-actions button{flex:1;font-size:.78rem;padding:6px 8px}
+  .loan-info{font-size:.75rem;color:var(--warn);background:rgba(251,191,36,.1);padding:6px 8px;border-radius:6px;margin-top:6px}
+  .empty{text-align:center;padding:60px 20px;color:var(--muted)}
+  .empty h3{color:var(--text)}
+  .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.7);display:none;align-items:center;justify-content:center;z-index:100;padding:20px}
+  .modal-backdrop.open{display:flex}
+  .modal{background:var(--panel);border:1px solid var(--border);border-radius:14px;width:100%;max-width:600px;max-height:90vh;overflow-y:auto;padding:24px}
+  .modal.wide{max-width:860px}
+  .modal h2{margin-top:0;font-size:1.2rem}
+  .form-row{margin-bottom:14px}
+  .form-row label{display:block;font-size:.8rem;color:var(--muted);margin-bottom:5px}
+  .form-row input,.form-row select,.form-row textarea{width:100%}
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:18px;flex-wrap:wrap}
+  .stats{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px}
+  .stat{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:12px 18px;flex:1;min-width:120px}
+  .stat-num{font-size:1.6rem;font-weight:700;color:var(--accent)}
+  .stat-label{font-size:.78rem;color:var(--muted)}
+  .loan-table{width:100%;border-collapse:collapse}
+  .loan-table th,.loan-table td{text-align:left;padding:10px 8px;border-bottom:1px solid var(--border);font-size:.85rem;vertical-align:top}
+  .loan-table th{color:var(--muted);font-weight:600;font-size:.75rem;text-transform:uppercase;letter-spacing:.05em}
+  .overdue{color:var(--danger);font-weight:600}
+  .notice{background:rgba(79,140,255,.1);border:1px solid rgba(79,140,255,.3);padding:12px 16px;border-radius:var(--radius);font-size:.85rem;margin-bottom:16px}
+  .notice.warn{background:rgba(251,191,36,.1);border-color:rgba(251,191,36,.3)}
+  .star-rating{font-size:1.4rem;letter-spacing:2px;color:var(--warn);cursor:default}
+  .star-rating .filled{color:var(--warn)}
+  .star-rating .empty{color:var(--border)}
+  .star-rating.editable{cursor:pointer}
+  .star-rating.editable span:hover{color:var(--accent)}
+  .review-block{background:var(--panel-2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:12px}
+  .review-block h4{margin:0 0 6px;font-size:.95rem;color:var(--text)}
+  .review-block .review-stars{margin-bottom:8px;font-size:1.2rem;letter-spacing:2px}
+  .review-block .review-text{font-size:.9rem;color:var(--text);white-space:pre-wrap}
+  .review-block .review-empty{color:var(--muted);font-style:italic;font-size:.85rem}
+  .details-layout{display:grid;grid-template-columns:200px 1fr;gap:20px}
+  .details-poster img{width:100%;border-radius:8px;display:block}
+  .details-poster .placeholder{aspect-ratio:2/3;background:var(--panel-2);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:3rem;color:var(--muted)}
+  .details-info h2{margin:0 0 4px}
+  .details-info .year{color:var(--muted);font-weight:400}
+  .details-meta{color:var(--muted);font-size:.85rem;margin-bottom:12px}
+  .details-section{margin-top:16px;padding-top:16px;border-top:1px solid var(--border)}
+  .details-section h3{margin:0 0 6px;font-size:.9rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+  .trailer-link{display:inline-block;margin-top:6px;color:var(--accent);text-decoration:none;font-weight:600}
+  .trailer-link:hover{text-decoration:underline}
+  .settings-row{display:flex;gap:8px;margin-bottom:12px;align-items:flex-end}
+  .settings-row .form-row{flex:1;margin-bottom:0}
+  .toast{position:fixed;bottom:20px;right:20px;background:var(--panel-2);border:1px solid var(--border);padding:12px 20px;border-radius:var(--radius);font-size:.85rem;z-index:200;opacity:0;transform:translateY(10px);transition:all .2s;pointer-events:none}
+  .toast.show{opacity:1;transform:translateY(0)}
+  .toast.success{border-color:var(--accent-2);color:var(--accent-2)}
+  .toast.error{border-color:var(--danger);color:var(--danger)}
+  .fetch-buttons{display:flex;gap:8px;flex-wrap:wrap}
+  @media(max-width:600px){.form-grid{grid-template-columns:1fr}.details-layout{grid-template-columns:1fr}.details-poster{max-width:180px}header h1{font-size:1rem}.tab{padding:6px 10px;font-size:.8rem}}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🎬 My <span>Movie</span> Library</h1>
+  <span class="admin-badge" id="admin-badge">ADMIN</span>
+  <div class="tabs">
+    <button class="tab active" data-tab="library">Library</button>
+    <button class="tab" data-tab="loans">Loans</button>
+    <button class="tab" id="tab-settings" data-tab="settings" style="display:none">Settings</button>
+    <button class="tab" id="tab-exit-admin" style="display:none;color:var(--danger)">Exit Admin</button>
+  </div>
+</header>
+
+<main>
+  <section id="view-library">
+    <div class="stats">
+      <div class="stat"><div class="stat-num" id="stat-total">0</div><div class="stat-label">Total Titles</div></div>
+      <div class="stat"><div class="stat-num" id="stat-available">0</div><div class="stat-label">Available</div></div>
+      <div class="stat"><div class="stat-num" id="stat-loaned">0</div><div class="stat-label">On Loan</div></div>
+      <div class="stat"><div class="stat-num" id="stat-overdue">0</div><div class="stat-label">Overdue</div></div>
+    </div>
+    <div class="toolbar">
+      <input class="search" type="text" id="search" placeholder="🔍 Search title, director, genre…">
+      <select id="filter-format">
+        <option value="">All Formats</option>
+        <option>VHS</option><option>DVD</option><option>Blu-Ray</option><option>4K</option>
+      </select>
+      <select id="filter-status">
+        <option value="">All Status</option>
+        <option value="available">Available</option>
+        <option value="loaned">On Loan</option>
+      </select>
+      <select id="sort">
+        <option value="added-desc">Recently Added</option>
+        <option value="title-asc">Title A–Z</option>
+        <option value="year-desc">Year (Newest)</option>
+        <option value="year-asc">Year (Oldest)</option>
+      </select>
+      <button class="btn" id="btn-add-movie" style="display:none">+ Add Movie</button>
+      <button class="btn secondary" id="btn-data" style="display:none">Backup</button>
+    </div>
+    <div class="grid" id="library-grid"></div>
+  </section>
+
+  <section id="view-loans" style="display:none">
+    <div class="notice">💡 Active loans are shown below. Overdue loans (past due date) are highlighted.</div>
+    <h2 style="font-size:1.1rem">Active Loans</h2>
+    <div id="loans-container"></div>
+    <h2 style="font-size:1.1rem;margin-top:28px">Loan History</h2>
+    <div id="history-container"></div>
+  </section>
+
+  <section id="view-settings" style="display:none">
+    <div class="notice warn">⚠️ API keys entered here are stored in your browser's localStorage and are visible in the page source. Do not use this on a public/shared computer.</div>
+    <h2 style="font-size:1.1rem">API Configuration</h2>
+    <div class="settings-row">
+      <div class="form-row">
+        <label>TMDb API Read Access Token (or v3 API Key)</label>
+        <input type="text" id="setting-tmdb" placeholder="Paste your TMDb token or API key">
+      </div>
+    </div>
+    <div class="settings-row">
+      <div class="form-row">
+        <label>fanart.tv API Key</label>
+        <input type="text" id="setting-fanart" placeholder="Paste your fanart.tv API key">
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="btn" id="btn-save-settings">Save Keys</button>
+      <button class="btn secondary" id="btn-clear-settings">Clear Keys</button>
+    </div>
+    <p style="color:var(--muted);font-size:.8rem;margin-top:16px">
+      Get a free TMDb key at <a href="https://www.themoviedb.org/settings/api" target="_blank" style="color:var(--accent)">themoviedb.org/settings/api</a>.<br>
+      Get a free fanart.tv key at <a href="https://fanart.tv/get-an-api-key/" target="_blank" style="color:var(--accent)">fanart.tv/get-an-api-key</a>.
+    </p>
+  </section>
+</main>
+
+<div class="modal-backdrop" id="movie-modal">
+  <div class="modal">
+    <h2 id="movie-modal-title">Add Movie</h2>
+    <input type="hidden" id="movie-id">
+    <div class="form-row"><label>Title *</label><input type="text" id="m-title" placeholder="e.g. The Matrix"></div>
+    <div class="form-grid">
+      <div class="form-row"><label>Year</label><input type="number" id="m-year" placeholder="1999" min="1900" max="2100"></div>
+      <div class="form-row"><label>Format *</label><select id="m-format"><option>VHS</option><option>DVD</option><option>Blu-Ray</option><option>4K</option></select></div>
+    </div>
+    <div class="form-grid">
+      <div class="form-row"><label>Director</label><input type="text" id="m-director" placeholder="e.g. The Wachowskis"></div>
+      <div class="form-row"><label>Genre</label><input type="text" id="m-genre" placeholder="e.g. Sci-Fi"></div>
+    </div>
+    <div class="form-row">
+      <label>Cover Image URL</label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <input type="text" id="m-cover" placeholder="https://… or use a fetch button" style="flex:1;min-width:180px">
+      </div>
+      <div class="fetch-buttons" style="margin-top:8px">
+        <button class="btn secondary small" id="btn-fetch-cover" type="button">Fetch Cover + Synopsis (TMDb/fanart.tv)</button>
+        <button class="btn secondary small" id="btn-fetch-wikidata" type="button">Fetch Cover from Wikidata (no key)</button>
+      </div>
+    </div>
+    <div class="form-row">
+      <label>Description</label>
+      <textarea id="m-description" rows="3" placeholder="Plot synopsis…"></textarea>
+      <div class="fetch-buttons" style="margin-top:6px">
+        <button class="btn secondary small" id="btn-fetch-synopsis" type="button">Fetch Synopsis (TMDb)</button>
+      </div>
+    </div>
+    <div class="form-row"><label>YouTube Trailer URL</label><input type="text" id="m-trailer" placeholder="https://www.youtube.com/watch?v=…"></div>
+
+    <div class="review-block">
+      <h4>Scott's Review</h4>
+      <div class="review-stars">
+        <div class="star-rating editable" id="scott-rating-stars" data-value="0">
+          <span data-v="1">★</span><span data-v="2">★</span><span data-v="3">★</span><span data-v="4">★</span><span data-v="5">★</span>
+        </div>
+      </div>
+      <label style="display:block;font-size:.8rem;color:var(--muted);margin-bottom:5px">Scott's Review</label>
+      <textarea id="m-review-scott" rows="3" placeholder="Scott's review…"></textarea>
+    </div>
+
+    <div class="review-block">
+      <h4>Nicole's Review</h4>
+      <div class="review-stars">
+        <div class="star-rating editable" id="nicole-rating-stars" data-value="0">
+          <span data-v="1">★</span><span data-v="2">★</span><span data-v="3">★</span><span data-v="4">★</span><span data-v="5">★</span>
+        </div>
+      </div>
+      <label style="display:block;font-size:.8rem;color:var(--muted);margin-bottom:5px">Nicole's Review</label>
+      <textarea id="m-review-nicole" rows="3" placeholder="Nicole's review…"></textarea>
+    </div>
+
+    <div class="form-row"><label>Notes (condition, edition, etc.)</label><textarea id="m-notes" rows="2"></textarea></div>
+    <div class="modal-actions">
+      <button class="btn secondary" id="movie-cancel">Cancel</button>
+      <button class="btn" id="movie-save">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="details-modal">
+  <div class="modal wide">
+    <div id="details-content"></div>
+    <div class="modal-actions">
+      <button class="btn secondary" id="details-loan" style="display:none">Loan This Movie</button>
+      <button class="btn secondary" id="details-close">Close</button>
+      <button class="btn" id="details-edit" style="display:none">Edit</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="loan-modal">
+  <div class="modal">
+    <h2>Loan This Movie</h2>
+    <p id="loan-movie-name" style="color:var(--muted);margin-top:-8px"></p>
+    <input type="hidden" id="loan-movie-id">
+    <div class="form-row"><label>Your Name *</label><input type="text" id="l-borrower" placeholder="e.g. Alex"></div>
+    <div class="form-grid">
+      <div class="form-row"><label>Contact (email/phone)</label><input type="text" id="l-contact" placeholder="Optional"></div>
+      <div class="form-row"><label>Return By</label><input type="date" id="l-due"></div>
+    </div>
+    <div class="form-row"><label>Notes</label><input type="text" id="l-notes" placeholder="Optional"></div>
+    <div class="modal-actions">
+      <button class="btn secondary" id="loan-cancel">Cancel</button>
+      <button class="btn" id="loan-save">Confirm Loan</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="data-modal">
+  <div class="modal">
+    <h2>Backup &amp; Restore</h2>
+    <p style="color:var(--muted);font-size:.85rem">Export your full collection as JSON. Import to restore or move between devices.</p>
+    <div class="form-row"><label>Export</label><button class="btn" id="btn-export">⬇ Download Backup JSON</button></div>
+    <div class="form-row"><label>Import (replaces current data)</label><input type="file" id="import-file" accept="application/json" style="background:var(--panel-2);padding:8px;border-radius:8px;width:100%"></div>
+    <div class="modal-actions"><button class="btn secondary" id="data-close">Close</button></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  var STORAGE_KEY = "movie_library_v3";
+  var LEGACY_STORAGE_KEY = "movie_library_v2";
+  var SETTINGS_KEY = "movie_library_settings";
+  var ADMIN_KEY = "movie_library_admin";
+
+  function migrateLegacy(movies) {
+    return movies.map(function (m) {
+      var out = Object.assign({}, m);
+      // Migrate old personalRating/personalReview -> Scott's fields
+      if (out.scottRating === undefined) out.scottRating = out.personalRating || 0;
+      if (out.scottReview === undefined) out.scottReview = out.personalReview || "";
+      if (out.nicoleRating === undefined) out.nicoleRating = 0;
+      if (out.nicoleReview === undefined) out.nicoleReview = "";
+      delete out.personalRating;
+      delete out.personalReview;
+      return out;
+    });
+  }
+
+  function loadData() {
+    try {
+      var raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        var d = JSON.parse(raw);
+        d.movies = migrateLegacy(d.movies || []);
+        return d;
+      }
+      // Try legacy key for first-time migration
+      var legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
+      if (legacy) {
+        var old = JSON.parse(legacy);
+        var migrated = { movies: migrateLegacy(old.movies || []), loans: old.loans || [] };
+        saveData(migrated);
+        return migrated;
+      }
+    } catch (e) {}
+    return { movies: [], loans: [] };
+  }
+  function saveData(data) { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
+  function loadSettings() {
+    try { return JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}; } catch(e) { return {}; }
+  }
+  function saveSettings(s) { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); }
+
+  var DB = loadData();
+  var Settings = loadSettings();
+  var isAdmin = window.location.hash === "#admin" || localStorage.getItem(ADMIN_KEY) === "true";
+
+  if (window.location.hash === "#admin") {
+    localStorage.setItem(ADMIN_KEY, "true");
+    isAdmin = true;
+    history.replaceState(null, "", window.location.pathname);
+  }
+
+  function uid() { return Math.random().toString(36).slice(2, 10); }
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function $(id) { return document.getElementById(id); }
+
+  function toast(msg, type) {
+    var el = $("toast");
+    el.textContent = msg;
+    el.className = "toast show " + (type || "");
+    setTimeout(function () { el.className = "toast"; }, 3000);
+  }
+
+  function isMovieOnLoan(movieId) {
+    return DB.loans.find(function (l) { return l.movieId === movieId && !l.returnedDate; });
+  }
+  function isOverdue(loan) {
+    if (!loan.dueDate || loan.returnedDate) return false;
+    return new Date(loan.dueDate) < new Date(new Date().toDateString());
+  }
+
+  function applyAdminVisibility() {
+    $("btn-add-movie").style.display = isAdmin ? "inline-block" : "none";
+    $("btn-data").style.display = isAdmin ? "inline-block" : "none";
+    $("tab-settings").style.display = isAdmin ? "inline-block" : "none";
+    $("tab-exit-admin").style.display = isAdmin ? "inline-block" : "none";
+    $("admin-badge").className = "admin-badge" + (isAdmin ? " on" : "");
+  }
+
+  function switchTab(tab) {
+    document.querySelectorAll(".tab").forEach(function (t) {
+      t.classList.toggle("active", t.dataset.tab === tab);
+    });
+    ["library","loans","settings"].forEach(function (v) {
+      var el = $("view-" + v);
+      if (el) el.style.display = v === tab ? "block" : "none";
+    });
+    if (tab === "library") renderLibrary();
+    if (tab === "loans") renderLoans();
+    if (tab === "settings") loadSettingsIntoForm();
+  }
+
+  function getFilteredMovies() {
+    var q = $("search").value.toLowerCase().trim();
+    var fmt = $("filter-format").value;
+    var status = $("filter-status").value;
+    var sort = $("sort").value;
+    var list = DB.movies.filter(function (m) {
+      var hay = (m.title + " " + (m.director || "") + " " + (m.genre || "")).toLowerCase();
+      if (q && hay.indexOf(q) === -1) return false;
+      if (fmt && m.format !== fmt) return false;
+      var onLoan = !!isMovieOnLoan(m.id);
+      if (status === "available" && onLoan) return false;
+      if (status === "loaned" && !onLoan) return false;
+      return true;
+    });
+    list.sort(function (a, b) {
+      switch (sort) {
+        case "title-asc": return a.title.localeCompare(b.title);
+        case "year-desc": return (b.year || 0) - (a.year || 0);
+        case "year-asc":  return (a.year || 0) - (b.year || 0);
+        default: return (b.addedAt || 0) - (a.addedAt || 0);
+      }
+    });
+    return list;
+  }
+
+  function renderLibrary() {
+    var total = DB.movies.length;
+    var loaned = DB.movies.filter(function (m) { return isMovieOnLoan(m.id); }).length;
+    var overdue = DB.loans.filter(function (l) { return !l.returnedDate && isOverdue(l); }).length;
+    $("stat-total").textContent = total;
+    $("stat-available").textContent = total - loaned;
+    $("stat-loaned").textContent = loaned;
+    $("stat-overdue").textContent = overdue;
+
+    var grid = $("library-grid");
+    var movies = getFilteredMovies();
+    if (!movies.length) {
+      grid.innerHTML = '<div class="empty" style="grid-column:1/-1"><h3>' +
+        (total === 0 ? "Your library is empty" : "No matches") + "</h3><p>" +
+        (total === 0 ? (isAdmin ? 'Click "+ Add Movie" to start cataloguing.' : "The owner hasn't added any movies yet.") : "Try adjusting your filters.") +
+        "</p></div>";
+      return;
+    }
+    grid.innerHTML = movies.map(function (m) {
+      var loan = isMovieOnLoan(m.id);
+      var coverStyle = m.cover ? 'style="background-image:url(\'' + esc(m.cover) + '\')"' : "";
+      return '<div class="card" data-details="' + m.id + '">' +
+        '<div class="cover" ' + coverStyle + '>' + (m.cover ? "" : "🎞️") + "</div>" +
+        '<div class="card-body">' +
+          '<div class="card-title">' + esc(m.title) + "</div>" +
+          '<div class="card-meta">' + (m.year ? esc(m.year) : "") +
+            (m.director ? " · " + esc(m.director) : "") + "</div>" +
+          '<div class="badges">' +
+            '<span class="badge format">' + esc(m.format) + "</span>" +
+            (m.genre ? '<span class="badge" style="background:#2b2540;color:#c4a7ff">' + esc(m.genre) + "</span>" : "") +
+            '<span class="badge ' + (loan ? "loaned" : "available") + '">' +
+              (loan ? "On Loan" : "Available") + "</span>" +
+          "</div>" +
+          (loan ? '<div class="loan-info">👤 ' + esc(loan.borrower) +
+                  (loan.dueDate ? " · due " + esc(loan.dueDate) : "") + "</div>" : "") +
+          '<div class="card-actions">' +
+            (loan
+              ? (isAdmin ? '<button type="button" class="btn secondary" data-return="' + m.id + '">Return</button>' : '<button type="button" class="btn secondary" disabled>On Loan</button>')
+              : '<button type="button" class="btn" data-loan="' + m.id + '">Loan</button>') +
+            (isAdmin ? '<button type="button" class="btn secondary" data-edit="' + m.id + '">Edit</button>' +
+                       '<button type="button" class="btn secondary" data-delete="' + m.id + '">🗑</button>' : '') +
+          "</div>" +
+        "</div>" +
+      "</div>";
+    }).join("");
+  }
+
+  function renderLoans() {
+    var active = DB.loans.filter(function (l) { return !l.returnedDate; });
+    var history = DB.loans.filter(function (l) { return l.returnedDate; })
+      .sort(function (a, b) { return (b.returnedDate || "").localeCompare(a.returnedDate || ""); });
+    var activeEl = $("loans-container");
+    if (!active.length) {
+      activeEl.innerHTML = '<div class="empty"><h3>No active loans</h3><p>Loan a movie from the Library tab.</p></div>';
+    } else {
+      activeEl.innerHTML = '<table class="loan-table"><thead><tr>' +
+        "<th>Movie</th><th>Borrower</th><th>Contact</th><th>Loaned</th><th>Due</th>" +
+        (isAdmin ? "<th>Action</th>" : "") +
+        "</tr></thead><tbody>" + active.map(function (l) {
+          var m = DB.movies.find(function (x) { return x.id === l.movieId; });
+          var overdue = isOverdue(l);
+          return "<tr>" +
+            "<td><strong>" + esc(m ? m.title : "(deleted)") + "</strong></td>" +
+            "<td>" + esc(l.borrower) + "</td>" +
+            "<td>" + esc(l.contact || "—") + "</td>" +
+            "<td>" + esc(l.loanDate) + "</td>" +
+            '<td class="' + (overdue ? "overdue" : "") + '">' + esc(l.dueDate || "—") + (overdue ? " ⚠" : "") + "</td>" +
+            (isAdmin ? '<td><button type="button" class="btn small" data-return="' + l.movieId + '">Return</button></td>' : "") +
+          "</tr>";
+        }).join("") + "</tbody></table>";
+    }
+    var histEl = $("history-container");
+    if (!history.length) {
+      histEl.innerHTML = '<p style="color:var(--muted);font-size:.85rem">No returned loans yet.</p>';
+    } else {
+      histEl.innerHTML = '<table class="loan-table"><thead><tr>' +
+        "<th>Movie</th><th>Borrower</th><th>Loaned</th><th>Returned</th>" +
+        "</tr></thead><tbody>" + history.map(function (l) {
+          var m = DB.movies.find(function (x) { return x.id === l.movieId; });
+          return "<tr><td>" + esc(m ? m.title : "(deleted)") + "</td><td>" + esc(l.borrower) +
+            "</td><td>" + esc(l.loanDate) + "</td><td>" + esc(l.returnedDate) + "</td></tr>";
+        }).join("") + "</tbody></table>";
+    }
+  }
+
+  function starsHtml(rating) {
+    var r = rating || 0;
+    var s = "";
+    for (var i = 1; i <= 5; i++) {
+      s += '<span class="' + (i <= r ? "filled" : "empty") + '">★</span>';
+    }
+    return s;
+  }
+
+  function reviewBlock(name, rating, review) {
+    var r = rating || 0;
+    var hasText = review && review.trim();
+    return '<div class="review-block">' +
+      "<h4>" + esc(name) + "</h4>" +
+      '<div class="review-stars star-rating">' + starsHtml(r) +
+        ' <span style="font-size:.8rem;color:var(--muted)">(' + r + '/5)</span></div>' +
+      (hasText
+        ? '<div class="review-text">' + esc(review) + "</div>"
+        : '<div class="review-empty">No review yet.</div>') +
+    "</div>";
+  }
+
+  function showDetails(movieId) {
+    var m = DB.movies.find(function (x) { return x.id === movieId; });
+    if (!m) return;
+    var trailerHtml = "";
+    if (m.trailerUrl) {
+      trailerHtml = '<a class="trailer-link" href="' + esc(m.trailerUrl) + '" target="_blank">▶ Watch Trailer on YouTube</a>';
+    }
+    var content =
+      '<div class="details-layout">' +
+        '<div class="details-poster">' +
+          (m.cover ? '<img src="' + esc(m.cover) + '" alt="Poster">' : '<div class="placeholder">🎞️</div>') +
+        "</div>" +
+        '<div class="details-info">' +
+          '<h2>' + esc(m.title) + (m.year ? ' <span class="year">(' + esc(m.year) + ')</span>' : "") + "</h2>" +
+          '<div class="details-meta">' +
+            esc(m.format) + (m.genre ? " · " + esc(m.genre) : "") + (m.director ? " · Dir. " + esc(m.director) : "") +
+          "</div>" +
+          (m.description ? '<div class="details-section"><h3>Description</h3><p>' + esc(m.description) + "</p></div>" : "") +
+          (trailerHtml ? '<div class="details-section"><h3>Trailer</h3>' + trailerHtml + "</div>" : "") +
+          '<div class="details-section"><h3>Reviews</h3>' +
+            reviewBlock("Scott's Review", m.scottRating, m.scottReview) +
+            reviewBlock("Nicole's Review", m.nicoleRating, m.nicoleReview) +
+          "</div>" +
+          (m.notes ? '<div class="details-section"><h3>Notes</h3><p>' + esc(m.notes) + "</p></div>" : "") +
+        "</div>" +
+      "</div>";
+    $("details-content").innerHTML = content;
+    $("details-edit").style.display = isAdmin ? "inline-block" : "none";
+    $("details-edit").dataset.id = movieId;
+
+    var loanBtn = $("details-loan");
+    loanBtn.dataset.id = movieId;
+    if (isMovieOnLoan(movieId)) {
+      loanBtn.style.display = "none";
+    } else {
+      loanBtn.style.display = "inline-block";
+      loanBtn.textContent = "Loan This Movie";
+    }
+
+    openModal("details-modal");
+  }
+
+  function openModal(id) { $(id).classList.add("open"); }
+  function closeModal(id) { $(id).classList.remove("open"); }
+
+  function setRatingStars(elId, v) {
+    var el = $(elId);
+    el.dataset.value = v;
+    el.querySelectorAll("span").forEach(function (s) {
+      s.style.color = parseInt(s.dataset.v, 10) <= v ? "var(--warn)" : "var(--border)";
+    });
+  }
+
+  function openAddModal() {
+    $("movie-modal-title").textContent = "Add Movie";
+    ["movie-id","m-title","m-year","m-director","m-genre","m-cover","m-description","m-trailer","m-review-scott","m-review-nicole","m-notes"].forEach(function (id) {
+      $(id).value = "";
+    });
+    $("m-format").value = "DVD";
+    setRatingStars("scott-rating-stars", 0);
+    setRatingStars("nicole-rating-stars", 0);
+    openModal("movie-modal");
+    setTimeout(function () { $("m-title").focus(); }, 50);
+  }
+
+  function openEditModal(id) {
+    var m = DB.movies.find(function (x) { return x.id === id; });
+    if (!m) return;
+    closeModal("details-modal");
+    $("movie-modal-title").textContent = "Edit Movie";
+    $("movie-id").value = m.id;
+    $("m-title").value = m.title || "";
+    $("m-year").value = m.year || "";
+    $("m-director").value = m.director || "";
+    $("m-genre").value = m.genre || "";
+    $("m-format").value = m.format || "DVD";
+    $("m-cover").value = m.cover || "";
+    $("m-description").value = m.description || "";
+    $("m-trailer").value = m.trailerUrl || "";
+    $("m-review-scott").value = m.scottReview || "";
+    $("m-review-nicole").value = m.nicoleReview || "";
+    $("m-notes").value = m.notes || "";
+    setRatingStars("scott-rating-stars", m.scottRating || 0);
+    setRatingStars("nicole-rating-stars", m.nicoleRating || 0);
+    openModal("movie-modal");
+  }
+
+  function saveMovie() {
+    var id = $("movie-id").value;
+    var title = $("m-title").value.trim();
+    if (!title) { alert("Title is required."); return; }
+    var data = {
+      title: title,
+      year: $("m-year").value ? parseInt($("m-year").value, 10) : null,
+      director: $("m-director").value.trim(),
+      genre: $("m-genre").value.trim(),
+      format: $("m-format").value,
+      cover: $("m-cover").value.trim(),
+      description: $("m-description").value.trim(),
+      trailerUrl: $("m-trailer").value.trim(),
+      scottRating: parseInt($("scott-rating-stars").dataset.value, 10) || 0,
+      scottReview: $("m-review-scott").value.trim(),
+      nicoleRating: parseInt($("nicole-rating-stars").dataset.value, 10) || 0,
+      nicoleReview: $("m-review-nicole").value.trim(),
+      notes: $("m-notes").value.trim()
+    };
+    if (id) {
+      var idx = DB.movies.findIndex(function (x) { return x.id === id; });
+      DB.movies[idx] = Object.assign({}, DB.movies[idx], data);
+    } else {
+      DB.movies.push(Object.assign({ id: uid(), addedAt: Date.now() }, data));
+    }
+    saveData(DB);
+    closeModal("movie-modal");
+    renderAll();
+    toast("Movie saved", "success");
+  }
+
+  function deleteMovie(id) {
+    var m = DB.movies.find(function (x) { return x.id === id; });
+    if (!m) return;
+    if (isMovieOnLoan(id)) { alert("This movie is currently on loan. Return it first."); return; }
+    if (!confirm('Delete "' + m.title + '"? This cannot be undone.')) return;
+    DB.movies = DB.movies.filter(function (x) { return x.id !== id; });
+    saveData(DB);
+    renderAll();
+    toast("Movie deleted", "success");
+  }
+
+  function openLoanModal(movieId) {
+    var m = DB.movies.find(function (x) { return x.id === movieId; });
+    if (!m) return;
+    if (isMovieOnLoan(movieId)) { toast("This movie is already on loan", "error"); return; }
+    $("loan-movie-id").value = movieId;
+    $("loan-movie-name").textContent = '"' + m.title + '" (' + m.format + ")";
+    $("l-borrower").value = "";
+    $("l-contact").value = "";
+    $("l-notes").value = "";
+    var d = new Date(); d.setDate(d.getDate() + 14);
+    $("l-due").value = d.toISOString().slice(0, 10);
+    openModal("loan-modal");
+    setTimeout(function () { $("l-borrower").focus(); }, 50);
+  }
+
+  function saveLoan() {
+    var movieId = $("loan-movie-id").value;
+    var borrower = $("l-borrower").value.trim();
+    if (!borrower) { alert("Your name is required."); return; }
+    if (isMovieOnLoan(movieId)) { alert("This movie is already on loan."); closeModal("loan-modal"); renderAll(); return; }
+    DB.loans.push({
+      id: uid(),
+      movieId: movieId,
+      borrower: borrower,
+      contact: $("l-contact").value.trim(),
+      loanDate: new Date().toISOString().slice(0, 10),
+      dueDate: $("l-due").value || null,
+      notes: $("l-notes").value.trim(),
+      returnedDate: null
+    });
+    saveData(DB);
+    closeModal("loan-modal");
+    closeModal("details-modal");
+    renderAll();
+    toast("Loan recorded — enjoy!", "success");
+  }
+
+  function returnMovie(movieId) {
+    if (!isAdmin) { toast("Only the owner can mark movies returned", "error"); return; }
+    var loan = DB.loans.find(function (l) { return l.movieId === movieId && !l.returnedDate; });
+    if (!loan) return;
+    var movie = DB.movies.find(function (m) { return m.id === movieId; });
+    if (!confirm('Mark "' + (movie ? movie.title : "movie") + '" as returned?')) return;
+    loan.returnedDate = new Date().toISOString().slice(0, 10);
+    saveData(DB);
+    renderAll();
+    toast("Movie returned", "success");
+  }
+
+  async function tmdbLookup(title, year) {
+    if (!Settings.tmdbKey) throw new Error("Set your TMDb key in Settings first");
+    var url = "https://api.themoviedb.org/3/search/movie?api_key=" + encodeURIComponent(Settings.tmdbKey) +
+              "&query=" + encodeURIComponent(title) + (year ? "&year=" + year : "");
+    var res = await fetch(url);
+    if (!res.ok) throw new Error("TMDb returned " + res.status);
+    var data = await res.json();
+    if (!data.results || !data.results.length) throw new Error("No TMDb match for that title");
+    return data.results[0];
+  }
+
+  async function fetchFanartCover() {
+    var title = $("m-title").value.trim();
+    var year = $("m-year").value.trim();
+    if (!title) { toast("Enter a title first", "error"); return; }
+    if (!Settings.tmdbKey || !Settings.fanartKey) {
+      toast("Set your TMDb and fanart.tv keys in Settings first", "error");
+      return;
+    }
+    var btn = $("btn-fetch-cover");
+    btn.disabled = true; btn.textContent = "Fetching…";
+    try {
+      var result = await tmdbLookup(title, year);
+      var tmdbId = result.id;
+      if (result.overview) $("m-description").value = result.overview;
+      var fanartUrl = "https://webservice.fanart.tv/v3/movies/" + tmdbId + "?api_key=" + encodeURIComponent(Settings.fanartKey);
+      var fanartRes = await fetch(fanartUrl);
+      if (!fanartRes.ok) throw new Error("fanart.tv returned " + fanartRes.status);
+      var fanartData = await fanartRes.json();
+      var posters = fanartData.movieposter || [];
+      if (!posters.length) throw new Error("No posters on fanart.tv");
+      var english = posters.filter(function (p) { return p.lang === "en"; });
+      var candidates = english.length ? english : posters;
+      candidates.sort(function (a, b) { return parseInt(b.likes || 0, 10) - parseInt(a.likes || 0, 10); });
+      $("m-cover").value = candidates[0].url;
+      toast("Cover + synopsis fetched", "success");
+    } catch (err) {
+      toast("Fetch failed: " + err.message, "error");
+    } finally {
+      btn.disabled = false; btn.textContent = "Fetch Cover + Synopsis (TMDb/fanart.tv)";
+    }
+  }
+
+  async function fetchSynopsis() {
+    var title = $("m-title").value.trim();
+    var year = $("m-year").value.trim();
+    if (!title) { toast("Enter a title first", "error"); return; }
+    if (!Settings.tmdbKey) { toast("Set your TMDb key in Settings first", "error"); return; }
+    var btn = $("btn-fetch-synopsis");
+    btn.disabled = true; btn.textContent = "Fetching…";
+    try {
+      var result = await tmdbLookup(title, year);
+      if (!result.overview) throw new Error("TMDb has no synopsis for that title");
+      $("m-description").value = result.overview;
+      toast("Synopsis fetched from TMDb", "success");
+    } catch (err) {
+      toast("Synopsis fetch failed: " + err.message, "error");
+    } finally {
+      btn.disabled = false; btn.textContent = "Fetch Synopsis (TMDb)";
+    }
+  }
+
+  async function fetchWikidataCover() {
+    var title = $("m-title").value.trim();
+    if (!title) { toast("Enter a title first", "error"); return; }
+    var btn = $("btn-fetch-wikidata");
+    btn.disabled = true; btn.textContent = "Searching…";
+    try {
+      var searchUrl = "https://www.wikidata.org/w/api.php?action=wbsearchentities&search=" +
+                      encodeURIComponent(title) + "&language=en&format=json&type=item&limit=5&origin=*";
+      var searchRes = await fetch(searchUrl);
+      if (!searchRes.ok) throw new Error("Wikidata search returned " + searchRes.status);
+      var searchData = await searchRes.json();
+      if (!searchData.search || !searchData.search.length) throw new Error("No Wikidata match");
+      var posterUrl = null;
+      for (var i = 0; i < searchData.search.length; i++) {
+        var qid = searchData.search[i].id;
+        var claimsUrl = "https://www.wikidata.org/w/api.php?action=wbgetclaims&entity=" +
+                        qid + "&property=P3383&format=json&origin=*";
+        var claimsRes = await fetch(claimsUrl);
+        if (!claimsRes.ok) continue;
+        var claimsData = await claimsRes.json();
+        var claims = claimsData.claims && claimsData.claims.P3383;
+        if (!claims || !claims.length) continue;
+        var filename = claims[0].mainsnak.datavalue.value;
+        if (!filename) continue;
+        var infoUrl = "https://commons.wikimedia.org/w/api.php?action=query&titles=File:" +
+                      encodeURIComponent(filename) + "&prop=imageinfo&iiprop=url&format=json&origin=*";
+        var infoRes = await fetch(infoUrl);
+        if (!infoRes.ok) continue;
+        var infoData = await infoRes.json();
+        var pages = infoData.query && infoData.query.pages;
+        if (!pages) continue;
+        var page = Object.values(pages)[0];
+        if (page.imageinfo && page.imageinfo.length) {
+          posterUrl = page.imageinfo[0].url;
+          break;
+        }
+      }
+      if (!posterUrl) throw new Error("No film poster found on Wikidata");
+      $("m-cover").value = posterUrl;
+      toast("Cover fetched from Wikidata", "success");
+    } catch (err) {
+      toast("Wikidata fetch failed: " + err.message, "error");
+    } finally {
+      btn.disabled = false; btn.textContent = "Fetch Cover from Wikidata (no key)";
+    }
+  }
+
+  function loadSettingsIntoForm() {
+    $("setting-tmdb").value = Settings.tmdbKey || "";
+    $("setting-fanart").value = Settings.fanartKey || "";
+  }
+
+  function exportData() {
+    var blob = new Blob([JSON.stringify(DB, null, 2)], { type: "application/json" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = "movie-library-backup-" + new Date().toISOString().slice(0, 10) + ".json";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function handleImport(e) {
+    var file = e.target.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function (evt) {
+      try {
+        var data = JSON.parse(evt.target.result);
+        if (!data.movies || !Array.isArray(data.movies)) throw new Error("Invalid format");
+        if (!confirm("This will REPLACE your current library with the imported data. Continue?")) return;
+        DB = { movies: migrateLegacy(data.movies), loans: data.loans || [] };
+        saveData(DB);
+        renderAll();
+        closeModal("data-modal");
+        toast("Import successful", "success");
+      } catch (err) {
+        alert("Import failed: " + err.message);
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  }
+
+  function renderAll() {
+    renderLibrary();
+    renderLoans();
+  }
+
+  function bind() {
+    document.querySelectorAll(".tab[data-tab]").forEach(function (t) {
+      t.addEventListener("click", function () { switchTab(t.dataset.tab); });
+    });
+    $("btn-add-movie").addEventListener("click", openAddModal);
+    $("btn-data").addEventListener("click", function () { openModal("data-modal"); });
+    $("tab-exit-admin").addEventListener("click", function () {
+      if (!confirm("Exit admin mode? You can re-enter by adding #admin to the URL.")) return;
+      localStorage.removeItem(ADMIN_KEY);
+      location.reload();
+    });
+
+    ["search","filter-format","filter-status","sort"].forEach(function (id) {
+      $(id).addEventListener("input", renderLibrary);
+      $(id).addEventListener("change", renderLibrary);
+    });
+
+    $("movie-cancel").addEventListener("click", function () { closeModal("movie-modal"); });
+    $("movie-save").addEventListener("click", saveMovie);
+    $("btn-fetch-cover").addEventListener("click", fetchFanartCover);
+    $("btn-fetch-synopsis").addEventListener("click", fetchSynopsis);
+    $("btn-fetch-wikidata").addEventListener("click", fetchWikidataCover);
+
+    $("details-close").addEventListener("click", function () { closeModal("details-modal"); });
+    $("details-edit").addEventListener("click", function () {
+      if (this.dataset.id) openEditModal(this.dataset.id);
+    });
+    $("details-loan").addEventListener("click", function () {
+      var id = this.dataset.id;
+      if (!id) return;
+      closeModal("details-modal");
+      openLoanModal(id);
+    });
+
+    $("loan-cancel").addEventListener("click", function () { closeModal("loan-modal"); });
+    $("loan-save").addEventListener("click", saveLoan);
+
+    $("btn-export").addEventListener("click", exportData);
+    $("data-close").addEventListener("click", function () { closeModal("data-modal"); });
+    $("import-file").addEventListener("change", handleImport);
+
+    $("btn-save-settings").addEventListener("click", function () {
+      Settings.tmdbKey = $("setting-tmdb").value.trim();
+      Settings.fanartKey = $("setting-fanart").value.trim();
+      saveSettings(Settings);
+      toast("Keys saved", "success");
+    });
+    $("btn-clear-settings").addEventListener("click", function () {
+      Settings = {};
+      saveSettings(Settings);
+      loadSettingsIntoForm();
+      toast("Keys cleared", "success");
+    });
+
+    ["scott-rating-stars","nicole-rating-stars"].forEach(function (elId) {
+      $(elId).addEventListener("click", function (e) {
+        var span = e.target.closest("span[data-v]");
+        if (!span) return;
+        setRatingStars(elId, parseInt(span.dataset.v, 10));
+      });
+    });
+
+    document.querySelectorAll(".modal-backdrop").forEach(function (bd) {
+      bd.addEventListener("click", function (e) {
+        if (e.target === bd) bd.classList.remove("open");
+      });
+    });
+
+    $("library-grid").addEventListener("click", function (e) {
+      var btn = e.target.closest("button");
+      if (btn) {
+        if (btn.disabled) return;
+        if (btn.dataset.loan)   { openLoanModal(btn.dataset.loan); return; }
+        if (btn.dataset.edit)   { openEditModal(btn.dataset.edit); return; }
+        if (btn.dataset.delete) { deleteMovie(btn.dataset.delete); return; }
+        if (btn.dataset.return) { returnMovie(btn.dataset.return); return; }
+        return;
+      }
+      var card = e.target.closest(".card[data-details]");
+      if (card) showDetails(card.dataset.details);
+    });
+
+    $("loans-container").addEventListener("click", function (e) {
+      var b = e.target.closest("button");
+      if (b && b.dataset.return) returnMovie(b.dataset.return);
+    });
+
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") {
+        document.querySelectorAll(".modal-backdrop.open").forEach(function (bd) {
+          bd.classList.remove("open");
+        });
+      }
+    });
+  }
+
+  applyAdminVisibility();
+  bind();
+  renderAll();
+})();
+</script>
+</body>
+</html>
