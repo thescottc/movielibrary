@@ -20,7 +20,7 @@
   main{max-width:1200px;margin:0 auto;padding:20px}
   .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:20px}
   input,select,textarea,button{font-family:inherit;font-size:.9rem}
-  input[type=text],input[type=date],input[type=number],input[type=email],input[type=url],select,textarea{background:var(--panel);border:1px solid var(--border);color:var(--text);padding:9px 12px;border-radius:var(--radius);outline:none}
+  input[type=text],input[type=date],input[type=number],input[type=email],input[type=password],input[type=url],select,textarea{background:var(--panel);border:1px solid var(--border);color:var(--text);padding:9px 12px;border-radius:var(--radius);outline:none}
   input:focus,select:focus,textarea:focus{border-color:var(--accent)}
   .search{flex:1;min-width:200px}
   button.btn{background:var(--accent);color:#fff;border:none;padding:9px 16px;border-radius:var(--radius);cursor:pointer;font-weight:600}
@@ -66,16 +66,16 @@
   .overdue{color:var(--danger);font-weight:600}
   .notice{background:rgba(79,140,255,.1);border:1px solid rgba(79,140,255,.3);padding:12px 16px;border-radius:var(--radius);font-size:.85rem;margin-bottom:16px}
   .notice.warn{background:rgba(251,191,36,.1);border-color:rgba(251,191,36,.3)}
-  .star-rating{font-size:1.4rem;letter-spacing:2px;color:var(--warn);cursor:default}
-  .star-rating .filled{color:var(--warn)}
-  .star-rating .empty{color:var(--border)}
-  .star-rating.editable{cursor:pointer}
-  .star-rating.editable span:hover{color:var(--accent)}
   .review-block{background:var(--panel-2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:12px}
   .review-block h4{margin:0 0 6px;font-size:.95rem;color:var(--text)}
   .review-block .review-stars{margin-bottom:8px;font-size:1.2rem;letter-spacing:2px}
   .review-block .review-text{font-size:.9rem;color:var(--text);white-space:pre-wrap}
   .review-block .review-empty{color:var(--muted);font-style:italic;font-size:.85rem}
+  .star-rating{font-size:1.4rem;letter-spacing:2px;color:var(--warn);cursor:default}
+  .star-rating .filled{color:var(--warn)}
+  .star-rating .empty{color:var(--border)}
+  .star-rating.editable{cursor:pointer}
+  .star-rating.editable span:hover{color:var(--accent)}
   .details-layout{display:grid;grid-template-columns:200px 1fr;gap:20px}
   .details-poster img{width:100%;border-radius:8px;display:block}
   .details-poster .placeholder{aspect-ratio:2/3;background:var(--panel-2);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:3rem;color:var(--muted)}
@@ -88,11 +88,13 @@
   .trailer-link:hover{text-decoration:underline}
   .settings-row{display:flex;gap:8px;margin-bottom:12px;align-items:flex-end}
   .settings-row .form-row{flex:1;margin-bottom:0}
-  .toast{position:fixed;bottom:20px;right:20px;background:var(--panel-2);border:1px solid var(--border);padding:12px 20px;border-radius:var(--radius);font-size:.85rem;z-index:200;opacity:0;transform:translateY(10px);transition:all .2s;pointer-events:none}
+  .toast{position:fixed;bottom:20px;right:20px;background:var(--panel-2);border:1px solid var(--border);padding:12px 20px;border-radius:var(--radius);font-size:.85rem;z-index:200;opacity:0;transform:translateY(10px);transition:all .2s;pointer-events:none;max-width:400px}
   .toast.show{opacity:1;transform:translateY(0)}
   .toast.success{border-color:var(--accent-2);color:var(--accent-2)}
   .toast.error{border-color:var(--danger);color:var(--danger)}
   .fetch-buttons{display:flex;gap:8px;flex-wrap:wrap}
+  .auth-status{font-size:.8rem;color:var(--muted);margin-bottom:8px}
+  .auth-status .logged-in{color:var(--accent-2);font-weight:600}
   @media(max-width:600px){.form-grid{grid-template-columns:1fr}.details-layout{grid-template-columns:1fr}.details-poster{max-width:180px}header h1{font-size:1rem}.tab{padding:6px 10px;font-size:.8rem}}
 </style>
 </head>
@@ -104,8 +106,7 @@
   <div class="tabs">
     <button class="tab active" data-tab="library">Library</button>
     <button class="tab" data-tab="loans">Loans</button>
-    <button class="tab" id="tab-settings" data-tab="settings" style="display:none">Settings</button>
-    <button class="tab" id="tab-exit-admin" style="display:none;color:var(--danger)">Exit Admin</button>
+    <button class="tab" id="tab-settings" data-tab="settings">Settings</button>
   </div>
 </header>
 
@@ -149,8 +150,28 @@
   </section>
 
   <section id="view-settings" style="display:none">
-    <div class="notice warn">⚠️ API keys entered here are stored in your browser's localStorage and are visible in the page source. Do not use this on a public/shared computer.</div>
-    <h2 style="font-size:1.1rem">API Configuration</h2>
+    <h2 style="font-size:1.1rem">Admin Sign-In</h2>
+    <div class="auth-status" id="auth-status">Not signed in.</div>
+    <div class="settings-row">
+      <div class="form-row">
+        <label>Email</label>
+        <input type="email" id="auth-email" placeholder="you@example.com">
+      </div>
+    </div>
+    <div class="settings-row">
+      <div class="form-row">
+        <label>Password</label>
+        <input type="password" id="auth-password" placeholder="Your password">
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+      <button class="btn" id="btn-sign-in">Sign In</button>
+      <button class="btn secondary" id="btn-sign-up">Sign Up (first time)</button>
+      <button class="btn secondary" id="btn-sign-out" style="display:none">Sign Out</button>
+    </div>
+
+    <h2 style="font-size:1.1rem;margin-top:28px">API Configuration</h2>
+    <div class="notice warn">⚠️ TMDb and fanart.tv keys are stored in your browser's localStorage. They are not sent to Supabase.</div>
     <div class="settings-row">
       <div class="form-row">
         <label>TMDb API Read Access Token (or v3 API Key)</label>
@@ -268,115 +289,160 @@
 <div class="modal-backdrop" id="data-modal">
   <div class="modal">
     <h2>Backup &amp; Restore</h2>
-    <p style="color:var(--muted);font-size:.85rem">Export your full collection as JSON. Import to restore or move between devices.</p>
+    <p style="color:var(--muted);font-size:.85rem">Export your full collection as JSON. Import to restore or move between devices (imports go to Supabase).</p>
     <div class="form-row"><label>Export</label><button class="btn" id="btn-export">⬇ Download Backup JSON</button></div>
-    <div class="form-row"><label>Import (replaces current data)</label><input type="file" id="import-file" accept="application/json" style="background:var(--panel-2);padding:8px;border-radius:8px;width:100%"></div>
+    <div class="form-row"><label>Import (adds to current Supabase data)</label><input type="file" id="import-file" accept="application/json" style="background:var(--panel-2);padding:8px;border-radius:8px;width:100%"></div>
     <div class="modal-actions"><button class="btn secondary" id="data-close">Close</button></div>
   </div>
 </div>
 
 <div class="toast" id="toast"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 (function () {
   "use strict";
 
-  var STORAGE_KEY = "movie_library_v3";
-  var LEGACY_STORAGE_KEY = "movie_library_v2";
+  /* ============================================================
+     CONFIG — fill these two values in before deploying
+     ============================================================ */
+  var SUPABASE_URL = "https://boxqvehvwpwhxdosmdys.supabase.co";
+  var SUPABASE_KEY = "sb_publishable_KUFQUiDlrczTiWi95_6DWQ_qI_7Pwxq";
+
   var SETTINGS_KEY = "movie_library_settings";
-  var ADMIN_KEY = "movie_library_admin";
 
-  function migrateLegacy(movies) {
-    return movies.map(function (m) {
-      var out = Object.assign({}, m);
-      // Migrate old personalRating/personalReview -> Scott's fields
-      if (out.scottRating === undefined) out.scottRating = out.personalRating || 0;
-      if (out.scottReview === undefined) out.scottReview = out.personalReview || "";
-      if (out.nicoleRating === undefined) out.nicoleRating = 0;
-      if (out.nicoleReview === undefined) out.nicoleReview = "";
-      delete out.personalRating;
-      delete out.personalReview;
-      return out;
-    });
-  }
+  var supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-  function loadData() {
-    try {
-      var raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        var d = JSON.parse(raw);
-        d.movies = migrateLegacy(d.movies || []);
-        return d;
-      }
-      // Try legacy key for first-time migration
-      var legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
-      if (legacy) {
-        var old = JSON.parse(legacy);
-        var migrated = { movies: migrateLegacy(old.movies || []), loans: old.loans || [] };
-        saveData(migrated);
-        return migrated;
-      }
-    } catch (e) {}
-    return { movies: [], loans: [] };
-  }
-  function saveData(data) { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
-  function loadSettings() {
-    try { return JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}; } catch(e) { return {}; }
-  }
-  function saveSettings(s) { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); }
-
-  var DB = loadData();
   var Settings = loadSettings();
-  var isAdmin = window.location.hash === "#admin" || localStorage.getItem(ADMIN_KEY) === "true";
+  var DB = { movies: [], loans: [] };
+  var currentUser = null;
 
-  if (window.location.hash === "#admin") {
-    localStorage.setItem(ADMIN_KEY, "true");
-    isAdmin = true;
-    history.replaceState(null, "", window.location.pathname);
-  }
-
-  function uid() { return Math.random().toString(36).slice(2, 10); }
+  function $(id) { return document.getElementById(id); }
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
     });
   }
-  function $(id) { return document.getElementById(id); }
-
   function toast(msg, type) {
     var el = $("toast");
     el.textContent = msg;
     el.className = "toast show " + (type || "");
-    setTimeout(function () { el.className = "toast"; }, 3000);
+    setTimeout(function () { el.className = "toast"; }, 3200);
   }
+  function loadSettings() {
+    try { return JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}; } catch(e) { return {}; }
+  }
+  function saveSettings(s) { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); }
 
   function isMovieOnLoan(movieId) {
-    return DB.loans.find(function (l) { return l.movieId === movieId && !l.returnedDate; });
+    return DB.loans.find(function (l) { return l.movie_id === movieId && !l.returned_date; });
   }
   function isOverdue(loan) {
-    if (!loan.dueDate || loan.returnedDate) return false;
-    return new Date(loan.dueDate) < new Date(new Date().toDateString());
+    if (!loan.due_date || loan.returned_date) return false;
+    return new Date(loan.due_date) < new Date(new Date().toDateString());
+  }
+  function isAdmin() { return !!currentUser; }
+
+  /* ============================================================
+     DATA LOAD / SAVE (Supabase)
+     ============================================================ */
+  async function loadFromSupabase() {
+    var mRes = await supabase.from("movies").select("*").order("added_at", { ascending: false });
+    if (mRes.error) throw new Error("Failed to load movies: " + mRes.error.message);
+    var lRes = await supabase.from("loans").select("*").order("loan_date", { ascending: false });
+    if (lRes.error) throw new Error("Failed to load loans: " + lRes.error.message);
+    DB.movies = mRes.data || [];
+    DB.loans = lRes.data || [];
   }
 
-  function applyAdminVisibility() {
-    $("btn-add-movie").style.display = isAdmin ? "inline-block" : "none";
-    $("btn-data").style.display = isAdmin ? "inline-block" : "none";
-    $("tab-settings").style.display = isAdmin ? "inline-block" : "none";
-    $("tab-exit-admin").style.display = isAdmin ? "inline-block" : "none";
-    $("admin-badge").className = "admin-badge" + (isAdmin ? " on" : "");
+  async function refresh() {
+    try {
+      await loadFromSupabase();
+      renderAll();
+      updateAuthUi();
+    } catch (err) {
+      toast("Data load failed: " + err.message, "error");
+    }
   }
 
-  function switchTab(tab) {
-    document.querySelectorAll(".tab").forEach(function (t) {
-      t.classList.toggle("active", t.dataset.tab === tab);
+  /* ============================================================
+     AUTH
+     ============================================================ */
+  function updateAuthUi() {
+    var status = $("auth-status");
+    var signOut = $("btn-sign-out");
+    var signIn = $("btn-sign-in");
+    var signUp = $("btn-sign-up");
+    var addBtn = $("btn-add-movie");
+    var dataBtn = $("btn-data");
+    var badge = $("admin-badge");
+
+    if (currentUser) {
+      status.innerHTML = 'Signed in as <span class="logged-in">' + esc(currentUser.email || currentUser.id) + "</span>";
+      signOut.style.display = "inline-block";
+      signIn.style.display = "none";
+      signUp.style.display = "none";
+      addBtn.style.display = "inline-block";
+      dataBtn.style.display = "inline-block";
+      badge.className = "admin-badge on";
+    } else {
+      status.textContent = "Not signed in. Sign in to manage the collection.";
+      signOut.style.display = "none";
+      signIn.style.display = "inline-block";
+      signUp.style.display = "inline-block";
+      addBtn.style.display = "none";
+      dataBtn.style.display = "none";
+      badge.className = "admin-badge";
+    }
+  }
+
+  async function initAuth() {
+    var sessionRes = await supabase.auth.getSession();
+    if (sessionRes.data && sessionRes.data.session) {
+      currentUser = sessionRes.data.session.user;
+    }
+    supabase.auth.onAuthStateChange(function (_event, session) {
+      currentUser = session ? session.user : null;
+      updateAuthUi();
+      renderAll();
     });
-    ["library","loans","settings"].forEach(function (v) {
-      var el = $("view-" + v);
-      if (el) el.style.display = v === tab ? "block" : "none";
-    });
-    if (tab === "library") renderLibrary();
-    if (tab === "loans") renderLoans();
-    if (tab === "settings") loadSettingsIntoForm();
+  }
+
+  async function signIn() {
+    var email = $("auth-email").value.trim();
+    var password = $("auth-password").value;
+    if (!email || !password) { toast("Enter email and password", "error"); return; }
+    var res = await supabase.auth.signInWithPassword({ email: email, password: password });
+    if (res.error) { toast("Sign-in failed: " + res.error.message, "error"); return; }
+    currentUser = res.data.user;
+    toast("Signed in", "success");
+    updateAuthUi();
+    renderAll();
+  }
+
+  async function signUp() {
+    var email = $("auth-email").value.trim();
+    var password = $("auth-password").value;
+    if (!email || !password) { toast("Enter email and password", "error"); return; }
+    var res = await supabase.auth.signUp({ email: email, password: password });
+    if (res.error) { toast("Sign-up failed: " + res.error.message, "error"); return; }
+    toast("Account created. Check your email if confirmation is required, then sign in.", "success");
+  }
+
+  async function signOut() {
+    await supabase.auth.signOut();
+    currentUser = null;
+    updateAuthUi();
+    renderAll();
+    toast("Signed out", "success");
+  }
+
+  /* ============================================================
+     RENDER
+     ============================================================ */
+  function renderAll() {
+    renderLibrary();
+    renderLoans();
   }
 
   function getFilteredMovies() {
@@ -398,7 +464,7 @@
         case "title-asc": return a.title.localeCompare(b.title);
         case "year-desc": return (b.year || 0) - (a.year || 0);
         case "year-asc":  return (a.year || 0) - (b.year || 0);
-        default: return (b.addedAt || 0) - (a.addedAt || 0);
+        default: return new Date(b.added_at || 0) - new Date(a.added_at || 0);
       }
     });
     return list;
@@ -407,7 +473,7 @@
   function renderLibrary() {
     var total = DB.movies.length;
     var loaned = DB.movies.filter(function (m) { return isMovieOnLoan(m.id); }).length;
-    var overdue = DB.loans.filter(function (l) { return !l.returnedDate && isOverdue(l); }).length;
+    var overdue = DB.loans.filter(function (l) { return !l.returned_date && isOverdue(l); }).length;
     $("stat-total").textContent = total;
     $("stat-available").textContent = total - loaned;
     $("stat-loaned").textContent = loaned;
@@ -418,7 +484,7 @@
     if (!movies.length) {
       grid.innerHTML = '<div class="empty" style="grid-column:1/-1"><h3>' +
         (total === 0 ? "Your library is empty" : "No matches") + "</h3><p>" +
-        (total === 0 ? (isAdmin ? 'Click "+ Add Movie" to start cataloguing.' : "The owner hasn't added any movies yet.") : "Try adjusting your filters.") +
+        (total === 0 ? (isAdmin() ? 'Click "+ Add Movie" to start cataloguing.' : "The owner hasn't added any movies yet.") : "Try adjusting your filters.") +
         "</p></div>";
       return;
     }
@@ -438,12 +504,12 @@
               (loan ? "On Loan" : "Available") + "</span>" +
           "</div>" +
           (loan ? '<div class="loan-info">👤 ' + esc(loan.borrower) +
-                  (loan.dueDate ? " · due " + esc(loan.dueDate) : "") + "</div>" : "") +
+                  (loan.due_date ? " · due " + esc(loan.due_date) : "") + "</div>" : "") +
           '<div class="card-actions">' +
             (loan
-              ? (isAdmin ? '<button type="button" class="btn secondary" data-return="' + m.id + '">Return</button>' : '<button type="button" class="btn secondary" disabled>On Loan</button>')
+              ? (isAdmin() ? '<button type="button" class="btn secondary" data-return="' + m.id + '">Return</button>' : '<button type="button" class="btn secondary" disabled>On Loan</button>')
               : '<button type="button" class="btn" data-loan="' + m.id + '">Loan</button>') +
-            (isAdmin ? '<button type="button" class="btn secondary" data-edit="' + m.id + '">Edit</button>' +
+            (isAdmin() ? '<button type="button" class="btn secondary" data-edit="' + m.id + '">Edit</button>' +
                        '<button type="button" class="btn secondary" data-delete="' + m.id + '">🗑</button>' : '') +
           "</div>" +
         "</div>" +
@@ -452,26 +518,25 @@
   }
 
   function renderLoans() {
-    var active = DB.loans.filter(function (l) { return !l.returnedDate; });
-    var history = DB.loans.filter(function (l) { return l.returnedDate; })
-      .sort(function (a, b) { return (b.returnedDate || "").localeCompare(a.returnedDate || ""); });
+    var active = DB.loans.filter(function (l) { return !l.returned_date; });
+    var history = DB.loans.filter(function (l) { return l.returned_date; });
     var activeEl = $("loans-container");
     if (!active.length) {
       activeEl.innerHTML = '<div class="empty"><h3>No active loans</h3><p>Loan a movie from the Library tab.</p></div>';
     } else {
       activeEl.innerHTML = '<table class="loan-table"><thead><tr>' +
         "<th>Movie</th><th>Borrower</th><th>Contact</th><th>Loaned</th><th>Due</th>" +
-        (isAdmin ? "<th>Action</th>" : "") +
+        (isAdmin() ? "<th>Action</th>" : "") +
         "</tr></thead><tbody>" + active.map(function (l) {
-          var m = DB.movies.find(function (x) { return x.id === l.movieId; });
+          var m = DB.movies.find(function (x) { return x.id === l.movie_id; });
           var overdue = isOverdue(l);
           return "<tr>" +
             "<td><strong>" + esc(m ? m.title : "(deleted)") + "</strong></td>" +
             "<td>" + esc(l.borrower) + "</td>" +
             "<td>" + esc(l.contact || "—") + "</td>" +
-            "<td>" + esc(l.loanDate) + "</td>" +
-            '<td class="' + (overdue ? "overdue" : "") + '">' + esc(l.dueDate || "—") + (overdue ? " ⚠" : "") + "</td>" +
-            (isAdmin ? '<td><button type="button" class="btn small" data-return="' + l.movieId + '">Return</button></td>' : "") +
+            "<td>" + esc(l.loan_date) + "</td>" +
+            '<td class="' + (overdue ? "overdue" : "") + '">' + esc(l.due_date || "—") + (overdue ? " ⚠" : "") + "</td>" +
+            (isAdmin() ? '<td><button type="button" class="btn small" data-return="' + l.movie_id + '">Return</button></td>' : "") +
           "</tr>";
         }).join("") + "</tbody></table>";
     }
@@ -482,9 +547,9 @@
       histEl.innerHTML = '<table class="loan-table"><thead><tr>' +
         "<th>Movie</th><th>Borrower</th><th>Loaned</th><th>Returned</th>" +
         "</tr></thead><tbody>" + history.map(function (l) {
-          var m = DB.movies.find(function (x) { return x.id === l.movieId; });
+          var m = DB.movies.find(function (x) { return x.id === l.movie_id; });
           return "<tr><td>" + esc(m ? m.title : "(deleted)") + "</td><td>" + esc(l.borrower) +
-            "</td><td>" + esc(l.loanDate) + "</td><td>" + esc(l.returnedDate) + "</td></tr>";
+            "</td><td>" + esc(l.loan_date) + "</td><td>" + esc(l.returned_date) + "</td></tr>";
         }).join("") + "</tbody></table>";
     }
   }
@@ -497,7 +562,6 @@
     }
     return s;
   }
-
   function reviewBlock(name, rating, review) {
     var r = rating || 0;
     var hasText = review && review.trim();
@@ -515,8 +579,8 @@
     var m = DB.movies.find(function (x) { return x.id === movieId; });
     if (!m) return;
     var trailerHtml = "";
-    if (m.trailerUrl) {
-      trailerHtml = '<a class="trailer-link" href="' + esc(m.trailerUrl) + '" target="_blank">▶ Watch Trailer on YouTube</a>';
+    if (m.trailer_url) {
+      trailerHtml = '<a class="trailer-link" href="' + esc(m.trailer_url) + '" target="_blank">▶ Watch Trailer on YouTube</a>';
     }
     var content =
       '<div class="details-layout">' +
@@ -531,14 +595,14 @@
           (m.description ? '<div class="details-section"><h3>Description</h3><p>' + esc(m.description) + "</p></div>" : "") +
           (trailerHtml ? '<div class="details-section"><h3>Trailer</h3>' + trailerHtml + "</div>" : "") +
           '<div class="details-section"><h3>Reviews</h3>' +
-            reviewBlock("Scott's Review", m.scottRating, m.scottReview) +
-            reviewBlock("Nicole's Review", m.nicoleRating, m.nicoleReview) +
+            reviewBlock("Scott's Review", m.scott_rating, m.scott_review) +
+            reviewBlock("Nicole's Review", m.nicole_rating, m.nicole_review) +
           "</div>" +
           (m.notes ? '<div class="details-section"><h3>Notes</h3><p>' + esc(m.notes) + "</p></div>" : "") +
         "</div>" +
       "</div>";
     $("details-content").innerHTML = content;
-    $("details-edit").style.display = isAdmin ? "inline-block" : "none";
+    $("details-edit").style.display = isAdmin() ? "inline-block" : "none";
     $("details-edit").dataset.id = movieId;
 
     var loanBtn = $("details-loan");
@@ -553,6 +617,9 @@
     openModal("details-modal");
   }
 
+  /* ============================================================
+     MODALS & CRUD
+     ============================================================ */
   function openModal(id) { $(id).classList.add("open"); }
   function closeModal(id) { $(id).classList.remove("open"); }
 
@@ -565,6 +632,7 @@
   }
 
   function openAddModal() {
+    if (!isAdmin()) { toast("Sign in to add movies", "error"); return; }
     $("movie-modal-title").textContent = "Add Movie";
     ["movie-id","m-title","m-year","m-director","m-genre","m-cover","m-description","m-trailer","m-review-scott","m-review-nicole","m-notes"].forEach(function (id) {
       $(id).value = "";
@@ -577,6 +645,7 @@
   }
 
   function openEditModal(id) {
+    if (!isAdmin()) { toast("Sign in to edit movies", "error"); return; }
     var m = DB.movies.find(function (x) { return x.id === id; });
     if (!m) return;
     closeModal("details-modal");
@@ -589,54 +658,59 @@
     $("m-format").value = m.format || "DVD";
     $("m-cover").value = m.cover || "";
     $("m-description").value = m.description || "";
-    $("m-trailer").value = m.trailerUrl || "";
-    $("m-review-scott").value = m.scottReview || "";
-    $("m-review-nicole").value = m.nicoleReview || "";
+    $("m-trailer").value = m.trailer_url || "";
+    $("m-review-scott").value = m.scott_review || "";
+    $("m-review-nicole").value = m.nicole_review || "";
     $("m-notes").value = m.notes || "";
-    setRatingStars("scott-rating-stars", m.scottRating || 0);
-    setRatingStars("nicole-rating-stars", m.nicoleRating || 0);
+    setRatingStars("scott-rating-stars", m.scott_rating || 0);
+    setRatingStars("nicole-rating-stars", m.nicole_rating || 0);
     openModal("movie-modal");
   }
 
-  function saveMovie() {
+  async function saveMovie() {
+    if (!isAdmin()) { toast("Sign in to save", "error"); return; }
     var id = $("movie-id").value;
     var title = $("m-title").value.trim();
     if (!title) { alert("Title is required."); return; }
-    var data = {
+    var payload = {
       title: title,
       year: $("m-year").value ? parseInt($("m-year").value, 10) : null,
-      director: $("m-director").value.trim(),
-      genre: $("m-genre").value.trim(),
+      director: $("m-director").value.trim() || null,
+      genre: $("m-genre").value.trim() || null,
       format: $("m-format").value,
-      cover: $("m-cover").value.trim(),
-      description: $("m-description").value.trim(),
-      trailerUrl: $("m-trailer").value.trim(),
-      scottRating: parseInt($("scott-rating-stars").dataset.value, 10) || 0,
-      scottReview: $("m-review-scott").value.trim(),
-      nicoleRating: parseInt($("nicole-rating-stars").dataset.value, 10) || 0,
-      nicoleReview: $("m-review-nicole").value.trim(),
-      notes: $("m-notes").value.trim()
+      cover: $("m-cover").value.trim() || null,
+      description: $("m-description").value.trim() || null,
+      trailer_url: $("m-trailer").value.trim() || null,
+      scott_rating: parseInt($("scott-rating-stars").dataset.value, 10) || 0,
+      scott_review: $("m-review-scott").value.trim() || null,
+      nicole_rating: parseInt($("nicole-rating-stars").dataset.value, 10) || 0,
+      nicole_review: $("m-review-nicole").value.trim() || null,
+      notes: $("m-notes").value.trim() || null
     };
+    var btn = $("movie-save");
+    btn.disabled = true; btn.textContent = "Saving…";
+    var res;
     if (id) {
-      var idx = DB.movies.findIndex(function (x) { return x.id === id; });
-      DB.movies[idx] = Object.assign({}, DB.movies[idx], data);
+      res = await supabase.from("movies").update(payload).eq("id", id);
     } else {
-      DB.movies.push(Object.assign({ id: uid(), addedAt: Date.now() }, data));
+      res = await supabase.from("movies").insert(payload);
     }
-    saveData(DB);
+    btn.disabled = false; btn.textContent = "Save";
+    if (res.error) { toast("Save failed: " + res.error.message, "error"); return; }
     closeModal("movie-modal");
-    renderAll();
+    await refresh();
     toast("Movie saved", "success");
   }
 
-  function deleteMovie(id) {
+  async function deleteMovie(id) {
+    if (!isAdmin()) { toast("Sign in to delete", "error"); return; }
     var m = DB.movies.find(function (x) { return x.id === id; });
     if (!m) return;
     if (isMovieOnLoan(id)) { alert("This movie is currently on loan. Return it first."); return; }
     if (!confirm('Delete "' + m.title + '"? This cannot be undone.')) return;
-    DB.movies = DB.movies.filter(function (x) { return x.id !== id; });
-    saveData(DB);
-    renderAll();
+    var res = await supabase.from("movies").delete().eq("id", id);
+    if (res.error) { toast("Delete failed: " + res.error.message, "error"); return; }
+    await refresh();
     toast("Movie deleted", "success");
   }
 
@@ -655,40 +729,45 @@
     setTimeout(function () { $("l-borrower").focus(); }, 50);
   }
 
-  function saveLoan() {
+  async function saveLoan() {
     var movieId = $("loan-movie-id").value;
     var borrower = $("l-borrower").value.trim();
     if (!borrower) { alert("Your name is required."); return; }
-    if (isMovieOnLoan(movieId)) { alert("This movie is already on loan."); closeModal("loan-modal"); renderAll(); return; }
-    DB.loans.push({
-      id: uid(),
-      movieId: movieId,
+    if (isMovieOnLoan(movieId)) { alert("This movie is already on loan."); closeModal("loan-modal"); await refresh(); return; }
+    var payload = {
+      movie_id: movieId,
       borrower: borrower,
-      contact: $("l-contact").value.trim(),
-      loanDate: new Date().toISOString().slice(0, 10),
-      dueDate: $("l-due").value || null,
-      notes: $("l-notes").value.trim(),
-      returnedDate: null
-    });
-    saveData(DB);
+      contact: $("l-contact").value.trim() || null,
+      due_date: $("l-due").value || null,
+      notes: $("l-notes").value.trim() || null
+    };
+    var btn = $("loan-save");
+    btn.disabled = true; btn.textContent = "Recording…";
+    var res = await supabase.from("loans").insert(payload);
+    btn.disabled = false; btn.textContent = "Confirm Loan";
+    if (res.error) { toast("Loan failed: " + res.error.message, "error"); return; }
     closeModal("loan-modal");
     closeModal("details-modal");
-    renderAll();
+    await refresh();
     toast("Loan recorded — enjoy!", "success");
   }
 
-  function returnMovie(movieId) {
-    if (!isAdmin) { toast("Only the owner can mark movies returned", "error"); return; }
-    var loan = DB.loans.find(function (l) { return l.movieId === movieId && !l.returnedDate; });
+  async function returnMovie(movieId) {
+    if (!isAdmin()) { toast("Only the owner can mark movies returned", "error"); return; }
+    var loan = DB.loans.find(function (l) { return l.movie_id === movieId && !l.returned_date; });
     if (!loan) return;
     var movie = DB.movies.find(function (m) { return m.id === movieId; });
     if (!confirm('Mark "' + (movie ? movie.title : "movie") + '" as returned?')) return;
-    loan.returnedDate = new Date().toISOString().slice(0, 10);
-    saveData(DB);
-    renderAll();
+    var today = new Date().toISOString().slice(0, 10);
+    var res = await supabase.from("loans").update({ returned_date: today }).eq("id", loan.id);
+    if (res.error) { toast("Return failed: " + res.error.message, "error"); return; }
+    await refresh();
     toast("Movie returned", "success");
   }
 
+  /* ============================================================
+     COVER / SYNOPSIS FETCHERS
+     ============================================================ */
   async function tmdbLookup(title, year) {
     if (!Settings.tmdbKey) throw new Error("Set your TMDb key in Settings first");
     var url = "https://api.themoviedb.org/3/search/movie?api_key=" + encodeURIComponent(Settings.tmdbKey) +
@@ -798,59 +877,98 @@
     }
   }
 
+  /* ============================================================
+     SETTINGS UI
+     ============================================================ */
   function loadSettingsIntoForm() {
     $("setting-tmdb").value = Settings.tmdbKey || "";
     $("setting-fanart").value = Settings.fanartKey || "";
   }
 
-  function exportData() {
-    var blob = new Blob([JSON.stringify(DB, null, 2)], { type: "application/json" });
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement("a");
-    a.href = url;
-    a.download = "movie-library-backup-" + new Date().toISOString().slice(0, 10) + ".json";
-    a.click();
-    URL.revokeObjectURL(url);
+  /* ============================================================
+     BACKUP / IMPORT
+     ============================================================ */
+  async function exportData() {
+    try {
+      await loadFromSupabase();
+      var blob = new Blob([JSON.stringify(DB, null, 2)], { type: "application/json" });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = url;
+      a.download = "movie-library-backup-" + new Date().toISOString().slice(0, 10) + ".json";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      toast("Export failed: " + err.message, "error");
+    }
   }
 
-  function handleImport(e) {
+  async function handleImport(e) {
+    if (!isAdmin()) { toast("Sign in to import", "error"); e.target.value = ""; return; }
     var file = e.target.files[0];
     if (!file) return;
     var reader = new FileReader();
-    reader.onload = function (evt) {
+    reader.onload = async function (evt) {
       try {
         var data = JSON.parse(evt.target.result);
         if (!data.movies || !Array.isArray(data.movies)) throw new Error("Invalid format");
-        if (!confirm("This will REPLACE your current library with the imported data. Continue?")) return;
-        DB = { movies: migrateLegacy(data.movies), loans: data.loans || [] };
-        saveData(DB);
-        renderAll();
+        if (!confirm("This will ADD " + data.movies.length + " movies to your Supabase library. Continue?")) {
+          e.target.value = ""; return;
+        }
+        // Map legacy field names to new schema if needed
+        var rows = data.movies.map(function (m) {
+          return {
+            title: m.title,
+            year: m.year || null,
+            director: m.director || null,
+            genre: m.genre || null,
+            format: m.format || "DVD",
+            cover: m.cover || null,
+            description: m.description || null,
+            trailer_url: m.trailer_url || m.trailerUrl || null,
+            scott_rating: m.scott_rating || m.scottRating || m.personalRating || 0,
+            scott_review: m.scott_review || m.scottReview || m.personalReview || null,
+            nicole_rating: m.nicole_rating || m.nicoleRating || 0,
+            nicole_review: m.nicole_review || m.nicoleReview || null,
+            notes: m.notes || null
+          };
+        });
+        var res = await supabase.from("movies").insert(rows);
+        if (res.error) throw new Error(res.error.message);
+        await refresh();
         closeModal("data-modal");
-        toast("Import successful", "success");
+        toast("Imported " + rows.length + " movies", "success");
       } catch (err) {
         alert("Import failed: " + err.message);
       }
+      e.target.value = "";
     };
     reader.readAsText(file);
-    e.target.value = "";
   }
 
-  function renderAll() {
-    renderLibrary();
-    renderLoans();
-  }
-
+  /* ============================================================
+     BIND
+     ============================================================ */
   function bind() {
     document.querySelectorAll(".tab[data-tab]").forEach(function (t) {
       t.addEventListener("click", function () { switchTab(t.dataset.tab); });
     });
+
+    function switchTab(tab) {
+      document.querySelectorAll(".tab").forEach(function (t) {
+        t.classList.toggle("active", t.dataset.tab === tab);
+      });
+      ["library","loans","settings"].forEach(function (v) {
+        var el = $("view-" + v);
+        if (el) el.style.display = v === tab ? "block" : "none";
+      });
+      if (tab === "library") renderLibrary();
+      if (tab === "loans") renderLoans();
+      if (tab === "settings") loadSettingsIntoForm();
+    }
+
     $("btn-add-movie").addEventListener("click", openAddModal);
     $("btn-data").addEventListener("click", function () { openModal("data-modal"); });
-    $("tab-exit-admin").addEventListener("click", function () {
-      if (!confirm("Exit admin mode? You can re-enter by adding #admin to the URL.")) return;
-      localStorage.removeItem(ADMIN_KEY);
-      location.reload();
-    });
 
     ["search","filter-format","filter-status","sort"].forEach(function (id) {
       $(id).addEventListener("input", renderLibrary);
@@ -894,6 +1012,10 @@
       toast("Keys cleared", "success");
     });
 
+    $("btn-sign-in").addEventListener("click", signIn);
+    $("btn-sign-up").addEventListener("click", signUp);
+    $("btn-sign-out").addEventListener("click", signOut);
+
     ["scott-rating-stars","nicole-rating-stars"].forEach(function (elId) {
       $(elId).addEventListener("click", function (e) {
         var span = e.target.closest("span[data-v]");
@@ -936,9 +1058,25 @@
     });
   }
 
-  applyAdminVisibility();
-  bind();
-  renderAll();
+  /* ============================================================
+     INIT
+     ============================================================ */
+  (async function init() {
+    if (SUPABASE_URL.indexOf("PASTE_") === 0 || SUPABASE_KEY.indexOf("PASTE_") === 0) {
+      document.body.innerHTML =
+        '<div style="max-width:600px;margin:80px auto;padding:24px;background:#1a1f27;border:1px solid #2d3642;border-radius:12px;color:#e6edf3;font-family:sans-serif">' +
+        "<h2>Configuration needed</h2>" +
+        "<p>Open this file in a text editor and replace:</p>" +
+        "<pre style='background:#0f1216;padding:12px;border-radius:8px'>var SUPABASE_URL = \"PASTE_YOUR_SUPABASE_URL_HERE\";\nvar SUPABASE_KEY = \"PASTE_YOUR_PUBLISHABLE_KEY_HERE\";</pre>" +
+        "<p>with your Supabase project URL and Publishable key.</p>" +
+        "</div>";
+      return;
+    }
+    bind();
+    await initAuth();
+    updateAuthUi();
+    await refresh();
+  })();
 })();
 </script>
 </body>
