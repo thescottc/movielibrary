@@ -351,6 +351,1082 @@
 <div class="toast" id="toast"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<!-- PART 2 GOES HERE -->
+<script>
+(function () {
+  "use strict";
+
+  /* ============================================================
+     CONFIG
+     ============================================================ */
+  var SUPABASE_URL = "PASTE_YOUR_SUPABASE_URL_HERE";
+  var SUPABASE_KEY = "PASTE_YOUR_PUBLISHABLE_KEY_HERE";
+
+  var SETTINGS_KEY = "movie_library_settings";
+  var supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  var Settings = loadSettings();
+  var DB = { movies: [], loans: [], lists: [], list_movies: [] };
+  var currentUser = null;
+  var pendingListMovies = [];
+
+  function $(id) { return document.getElementById(id); }
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function toast(msg, type) {
+    var el = $("toast");
+    el.textContent = msg;
+    el.className = "toast show " + (type || "");
+    setTimeout(function () { el.className = "toast"; }, 3200);
+  }
+  function loadSettings() {
+    try { return JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}; } catch(e) { return {}; }
+  }
+  function saveSettings(s) { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); }
+  function todayStr() { return new Date().toISOString().slice(0, 10); }
+  function isAdmin() { return !!currentUser; }
+
+  /* ============================================================
+     LOAN STATUS HELPERS
+     ============================================================ */
+  function loanStatus(loan) {
+    if (loan.returned_date) return "returned";
+    var today = todayStr();
+    if (loan.start_date && loan.start_date > today) return "reserved";
+    return "active";
+  }
+
+  function activeLoanFor(movieId) {
+    return DB.loans.find(function (l) {
+      return l.movie_id === movieId && loanStatus(l) === "active";
+    });
+  }
+
+  function reservationFor(movieId) {
+    return DB.loans
+      .filter(function (l) {
+        return l.movie_id === movieId && loanStatus(l) === "reserved";
+      })
+      .sort(function (a, b) { return (a.start_date || "").localeCompare(b.start_date || ""); })[0];
+  }
+
+  function isMovieAvailableNow(movieId) {
+    return !activeLoanFor(movieId);
+  }
+
+  function overlappingLoan(movieId, startDate, dueDate) {
+    var startA = startDate || todayStr();
+    var dueA = dueDate || startA;
+    return DB.loans.find(function (l) {
+      if (l.movie_id !== movieId) return false;
+      if (l.returned_date) return false;
+      var startB = l.start_date || l.loan_date || todayStr();
+      var dueB = l.due_date || "9999-12-31";
+      return startA <= dueB && startB <= dueA;
+    });
+  }
+
+  /* ============================================================
+     DATA LAYER
+     ============================================================ */
+  async function loadFromSupabase() {
+    var mRes = await supabase.from("movies").select("*").order("added_at", { ascending: false });
+    if (mRes.error) throw new Error("Failed to load movies: " + mRes.error.message);
+
+    var loanSource = isAdmin() ? "loans" : "loans_public";
+    var lRes = await supabase.from(loanSource).select("*").order("loan_date", { ascending: false });
+    if (lRes.error) throw new Error("Failed to load loans: " + lRes.error.message);
+
+    var liRes = await supabase.from("lists").select("*").order("created_at", { ascending: true });
+    if (liRes.error) throw new Error("Failed to load lists: " + liRes.error.message);
+
+    var lmRes = await supabase.from("list_movies").select("*").order("position", { ascending: true });
+    if (lmRes.error) throw new Error("Failed to load list memberships: " + lmRes.error.message);
+
+    DB.movies = mRes.data || [];
+    DB.loans = lRes.data || [];
+    DB.lists = liRes.data || [];
+    DB.list_movies = lmRes.data || [];
+  }
+
+  async function refresh() {
+    try {
+      await loadFromSupabase();
+      renderAll();
+      updateAuthUi();
+    } catch (err) {
+      toast("Data load failed: " + err.message, "error");
+    }
+  }
+
+  /* ============================================================
+     AUTH
+     ============================================================ */
+  function updateAuthUi() {
+    var status = $("auth-status");
+    if (currentUser) {
+      status.innerHTML = 'Signed in as <span class="logged-in">' + esc(currentUser.email || currentUser.id) + "</span>";
+      $("btn-sign-out").style.display = "inline-block";
+      $("btn-sign-in").style.display = "none";
+      $("btn-sign-up").style.display = "none";
+      $("admin-badge").className = "admin-badge on";
+      $("btn-add-movie").style.display = "inline-block";
+      $("btn-data").style.display = "inline-block";
+      $("btn-add-list").style.display = "inline-block";
+    } else {
+      status.textContent = "Not signed in. Sign in to manage the collection.";
+      $("btn-sign-out").style.display = "none";
+      $("btn-sign-in").style.display = "inline-block";
+      $("btn-sign-up").style.display = "inline-block";
+      $("admin-badge").className = "admin-badge";
+      $("btn-add-movie").style.display = "none";
+      $("btn-data").style.display = "none";
+      $("btn-add-list").style.display = "none";
+    }
+  }
+
+  async function initAuth() {
+    var sessionRes = await supabase.auth.getSession();
+    if (sessionRes.data && sessionRes.data.session) {
+      currentUser = sessionRes.data.session.user;
+    }
+    supabase.auth.onAuthStateChange(function (_event, session) {
+      currentUser = session ? session.user : null;
+      updateAuthUi();
+      refresh();
+    });
+  }
+
+  async function signIn() {
+    var email = $("auth-email").value.trim();
+    var password = $("auth-password").value;
+    if (!email || !password) { toast("Enter email and password", "error"); return; }
+    var res = await supabase.auth.signInWithPassword({ email: email, password: password });
+    if (res.error) { toast("Sign-in failed: " + res.error.message, "error"); return; }
+    currentUser = res.data.user;
+    toast("Signed in", "success");
+    updateAuthUi();
+    await refresh();
+  }
+
+  async function signUp() {
+    var email = $("auth-email").value.trim();
+    var password = $("auth-password").value;
+    if (!email || !password) { toast("Enter email and password", "error"); return; }
+    var res = await supabase.auth.signUp({ email: email, password: password });
+    if (res.error) { toast("Sign-up failed: " + res.error.message, "error"); return; }
+    toast("Account created. Check your email if confirmation is required, then sign in.", "success");
+  }
+
+  async function signOut() {
+    await supabase.auth.signOut();
+    currentUser = null;
+    updateAuthUi();
+    await refresh();
+    toast("Signed out", "success");
+  }
+
+  /* ============================================================
+     RENDER — library
+     ============================================================ */
+  function renderAll() {
+    renderLibrary();
+    renderLoans();
+    renderLists();
+  }
+
+  function getFilteredMovies() {
+    var q = $("search").value.toLowerCase().trim();
+    var fmt = $("filter-format").value;
+    var status = $("filter-status").value;
+    var sort = $("sort").value;
+    var list = DB.movies.filter(function (m) {
+      var hay = (m.title + " " + (m.director || "") + " " + (m.genre || "")).toLowerCase();
+      if (q && hay.indexOf(q) === -1) return false;
+      if (fmt && m.format !== fmt) return false;
+      if (status === "available" && !isMovieAvailableNow(m.id)) return false;
+      if (status === "loaned" && !activeLoanFor(m.id)) return false;
+      if (status === "reserved" && !reservationFor(m.id)) return false;
+      return true;
+    });
+    list.sort(function (a, b) {
+      switch (sort) {
+        case "title-asc": return a.title.localeCompare(b.title);
+        case "year-desc": return (b.year || 0) - (a.year || 0);
+        case "year-asc":  return (a.year || 0) - (b.year || 0);
+        default: return new Date(b.added_at || 0) - new Date(a.added_at || 0);
+      }
+    });
+    return list;
+  }
+
+  function renderLibrary() {
+    var total = DB.movies.length;
+    var loaned = DB.movies.filter(function (m) { return activeLoanFor(m.id); }).length;
+    var overdue = DB.loans.filter(function (l) {
+      return loanStatus(l) === "active" && l.due_date && l.due_date < todayStr();
+    }).length;
+    $("stat-total").textContent = total;
+    $("stat-available").textContent = total - loaned;
+    $("stat-loaned").textContent = loaned;
+    $("stat-overdue").textContent = overdue;
+
+    var grid = $("library-grid");
+    var movies = getFilteredMovies();
+    if (!movies.length) {
+      grid.innerHTML = '<div class="empty" style="grid-column:1/-1"><h3>' +
+        (total === 0 ? "Your library is empty" : "No matches") + "</h3><p>" +
+        (total === 0 ? (isAdmin() ? 'Click "+ Add Movie" to start cataloguing.' : "The owner hasn't added any movies yet.") : "Try adjusting your filters.") +
+        "</p></div>";
+      return;
+    }
+    grid.innerHTML = movies.map(function (m) {
+      var active = activeLoanFor(m.id);
+      var reserved = reservationFor(m.id);
+      var coverStyle = m.cover ? 'style="background-image:url(\'' + esc(m.cover) + '\')"' : "";
+      var statusBadge = active
+        ? '<span class="badge loaned">On Loan</span>'
+        : (reserved ? '<span class="badge reserved">Reserved</span>' : '<span class="badge available">Available</span>');
+      var loanInfo = "";
+      if (active) {
+        var who = isAdmin() ? "👤 " + esc(active.borrower) + " · " : "";
+        loanInfo = '<div class="loan-info">' + who + "due " + esc(active.due_date || "—") + "</div>";
+      } else if (reserved) {
+        var whoR = isAdmin() ? "👤 " + esc(reserved.borrower) + " · " : "";
+        loanInfo = '<div class="loan-info reserved">' + whoR + "reserved from " + esc(reserved.start_date) + "</div>";
+      }
+      return '<div class="card" data-details="' + m.id + '">' +
+        '<div class="cover" ' + coverStyle + '>' + (m.cover ? "" : "🎞️") + "</div>" +
+        '<div class="card-body">' +
+          '<div class="card-title">' + esc(m.title) + "</div>" +
+          '<div class="card-meta">' + (m.year ? esc(m.year) : "") +
+            (m.director ? " · " + esc(m.director) : "") + "</div>" +
+          '<div class="badges">' +
+            '<span class="badge format">' + esc(m.format) + "</span>" +
+            (m.genre ? '<span class="badge" style="background:#2b2540;color:#c4a7ff">' + esc(m.genre) + "</span>" : "") +
+            statusBadge +
+          "</div>" +
+          loanInfo +
+          '<div class="card-actions">' +
+            (active
+              ? (isAdmin() ? '<button type="button" class="btn secondary" data-return="' + m.id + '">Return</button>' : '<button type="button" class="btn secondary" disabled>On Loan</button>')
+              : '<button type="button" class="btn" data-loan="' + m.id + '">Loan</button>') +
+            (isAdmin() ? '<button type="button" class="btn secondary" data-edit="' + m.id + '">Edit</button>' +
+                       '<button type="button" class="btn secondary" data-delete="' + m.id + '">🗑</button>' : '') +
+          "</div>" +
+        "</div>" +
+      "</div>";
+    }).join("");
+  }
+
+  /* ============================================================
+     RENDER — loans
+     ============================================================ */
+  function renderLoans() {
+    var activeOrReserved = DB.loans.filter(function (l) {
+      var s = loanStatus(l);
+      return s === "active" || s === "reserved";
+    });
+    var history = DB.loans.filter(function (l) { return l.returned_date; });
+
+    var activeEl = $("loans-container");
+    if (!activeOrReserved.length) {
+      activeEl.innerHTML = '<div class="empty"><h3>No active loans or reservations</h3><p>Loan a movie from the Library tab.</p></div>';
+    } else {
+      var headers = "<th>Movie</th>";
+      if (isAdmin()) headers += "<th>Borrower</th><th>Contact</th>";
+      headers += "<th>Status</th><th>Start</th><th>Due</th>";
+      if (isAdmin()) headers += "<th>Action</th>";
+
+      activeEl.innerHTML = '<table class="loan-table"><thead><tr>' + headers +
+        "</tr></thead><tbody>" + activeOrReserved.map(function (l) {
+          var m = DB.movies.find(function (x) { return x.id === l.movie_id; });
+          var status = loanStatus(l);
+          var overdue = status === "active" && l.due_date && l.due_date < todayStr();
+          var row = "<tr>";
+          row += "<td><strong>" + esc(m ? m.title : "(deleted)") + "</strong></td>";
+          if (isAdmin()) {
+            row += "<td>" + esc(l.borrower || "—") + "</td>";
+            row += "<td>" + esc(l.contact || "—") + "</td>";
+          }
+          row += '<td>' + (status === "reserved"
+            ? '<span class="badge reserved">Reserved</span>'
+            : (overdue ? '<span class="overdue">Overdue</span>' : '<span class="badge loaned">On Loan</span>')) + "</td>";
+          row += "<td>" + esc(l.start_date || l.loan_date || "—") + "</td>";
+          row += '<td class="' + (overdue ? "overdue" : "") + '">' + esc(l.due_date || "—") + "</td>";
+          if (isAdmin()) {
+            row += '<td><button type="button" class="btn small" data-return="' + l.movie_id + '">Return</button></td>';
+          }
+          row += "</tr>";
+          return row;
+        }).join("") + "</tbody></table>";
+    }
+
+    var histEl = $("history-container");
+    if (!history.length) {
+      histEl.innerHTML = '<p style="color:var(--muted);font-size:.85rem">No returned loans yet.</p>';
+    } else {
+      var hHeaders = "<th>Movie</th>";
+      if (isAdmin()) hHeaders += "<th>Borrower</th>";
+      hHeaders += "<th>Loaned</th><th>Returned</th>";
+      histEl.innerHTML = '<table class="loan-table"><thead><tr>' + hHeaders +
+        "</tr></thead><tbody>" + history.map(function (l) {
+          var m = DB.movies.find(function (x) { return x.id === l.movie_id; });
+          var row = "<tr><td>" + esc(m ? m.title : "(deleted)") + "</td>";
+          if (isAdmin()) row += "<td>" + esc(l.borrower || "—") + "</td>";
+          row += "<td>" + esc(l.start_date || l.loan_date || "—") + "</td>";
+          row += "<td>" + esc(l.returned_date) + "</td></tr>";
+          return row;
+        }).join("") + "</tbody></table>";
+    }
+  }
+
+  /* ============================================================
+     RENDER — lists
+     ============================================================ */
+  function renderLists() {
+    var container = $("lists-container");
+    if (!DB.lists.length) {
+      container.innerHTML = '<div class="empty"><h3>No lists yet</h3><p>' +
+        (isAdmin() ? 'Click "+ New List" to create your first curated collection.' : "The owner hasn't created any lists yet.") +
+        "</p></div>";
+      return;
+    }
+    container.innerHTML = DB.lists.map(function (lst) {
+      var memberships = DB.list_movies.filter(function (lm) { return lm.list_id === lst.id; });
+      var chips = memberships.map(function (lm) {
+        var m = DB.movies.find(function (x) { return x.id === lm.movie_id; });
+        if (!m) return "";
+        return '<span class="list-movie-chip" data-details="' + m.id + '">' +
+          esc(m.title) +
+          (isAdmin() ? '<span class="remove" data-remove-from-list="' + lm.id + '" title="Remove">×</span>' : '') +
+        "</span>";
+      }).join("");
+      return '<div class="list-card">' +
+        '<div class="list-card-header">' +
+          "<div><h3>" + esc(lst.name) + "</h3>" +
+          (lst.description ? '<div class="list-card-desc">' + esc(lst.description) + "</div>" : "") +
+          "</div>" +
+          (isAdmin()
+            ? '<div class="list-actions">' +
+                '<button type="button" class="btn secondary small" data-edit-list="' + lst.id + '">Edit</button>' +
+                '<button type="button" class="btn secondary small" data-delete-list="' + lst.id + '">🗑</button>' +
+              "</div>"
+            : "") +
+        "</div>" +
+        (chips ? '<div class="list-movies">' + chips + "</div>" : '<div class="list-empty">No movies in this list yet.</div>') +
+      "</div>";
+    }).join("");
+  }
+
+  /* ============================================================
+     DETAILS
+     ============================================================ */
+  function starsHtml(rating) {
+    var r = rating || 0;
+    var s = "";
+    for (var i = 1; i <= 5; i++) {
+      s += '<span class="' + (i <= r ? "filled" : "empty") + '">★</span>';
+    }
+    return s;
+  }
+  function reviewBlock(name, rating, review) {
+    var r = rating || 0;
+    var hasText = review && review.trim();
+    return '<div class="review-block">' +
+      "<h4>" + esc(name) + "</h4>" +
+      '<div class="review-stars star-rating">' + starsHtml(r) +
+        ' <span style="font-size:.8rem;color:var(--muted)">(' + r + '/5)</span></div>' +
+      (hasText
+        ? '<div class="review-text">' + esc(review) + "</div>"
+        : '<div class="review-empty">No review yet.</div>') +
+    "</div>";
+  }
+
+  function showDetails(movieId) {
+    var m = DB.movies.find(function (x) { return x.id === movieId; });
+    if (!m) return;
+    var trailerHtml = "";
+    if (m.trailer_url) {
+      trailerHtml = '<a class="trailer-link" href="' + esc(m.trailer_url) + '" target="_blank">▶ Watch Trailer on YouTube</a>';
+    }
+    var content =
+      '<div class="details-layout">' +
+        '<div class="details-poster">' +
+          (m.cover ? '<img src="' + esc(m.cover) + '" alt="Poster">' : '<div class="placeholder">🎞️</div>') +
+        "</div>" +
+        '<div class="details-info">' +
+          '<h2>' + esc(m.title) + (m.year ? ' <span class="year">(' + esc(m.year) + ')</span>' : "") + "</h2>" +
+          '<div class="details-meta">' +
+            esc(m.format) + (m.genre ? " · " + esc(m.genre) : "") + (m.director ? " · Dir. " + esc(m.director) : "") +
+          "</div>" +
+          (m.description ? '<div class="details-section"><h3>Description</h3><p>' + esc(m.description) + "</p></div>" : "") +
+          (trailerHtml ? '<div class="details-section"><h3>Trailer</h3>' + trailerHtml + "</div>" : "") +
+          '<div class="details-section"><h3>Reviews</h3>' +
+            reviewBlock("Scott's Review", m.scott_rating, m.scott_review) +
+            reviewBlock("Nicole's Review", m.nicole_rating, m.nicole_review) +
+          "</div>" +
+          (m.notes ? '<div class="details-section"><h3>Notes</h3><p>' + esc(m.notes) + "</p></div>" : "") +
+        "</div>" +
+      "</div>";
+    $("details-content").innerHTML = content;
+    $("details-edit").style.display = isAdmin() ? "inline-block" : "none";
+    $("details-edit").dataset.id = movieId;
+
+    var loanBtn = $("details-loan");
+    loanBtn.dataset.id = movieId;
+    if (activeLoanFor(movieId)) {
+      loanBtn.style.display = "none";
+    } else {
+      loanBtn.style.display = "inline-block";
+      loanBtn.textContent = "Loan This Movie";
+    }
+
+    openModal("details-modal");
+  }
+
+  /* ============================================================
+     MODAL HELPERS
+     ============================================================ */
+  function openModal(id) { $(id).classList.add("open"); }
+  function closeModal(id) { $(id).classList.remove("open"); }
+
+  function setRatingStars(elId, v) {
+    var el = $(elId);
+    el.dataset.value = v;
+    el.querySelectorAll("span").forEach(function (s) {
+      s.style.color = parseInt(s.dataset.v, 10) <= v ? "var(--warn)" : "var(--border)";
+    });
+  }
+
+  /* ============================================================
+     MOVIE CRUD
+     ============================================================ */
+  function openAddModal() {
+    if (!isAdmin()) { toast("Sign in to add movies", "error"); return; }
+    $("movie-modal-title").textContent = "Add Movie";
+    ["movie-id","m-title","m-year","m-director","m-genre","m-cover","m-description","m-trailer","m-review-scott","m-review-nicole","m-notes"].forEach(function (id) {
+      $(id).value = "";
+    });
+    $("m-format").value = "DVD";
+    setRatingStars("scott-rating-stars", 0);
+    setRatingStars("nicole-rating-stars", 0);
+    openModal("movie-modal");
+    setTimeout(function () { $("m-title").focus(); }, 50);
+  }
+
+  function openEditModal(id) {
+    if (!isAdmin()) { toast("Sign in to edit movies", "error"); return; }
+    var m = DB.movies.find(function (x) { return x.id === id; });
+    if (!m) return;
+    closeModal("details-modal");
+    $("movie-modal-title").textContent = "Edit Movie";
+    $("movie-id").value = m.id;
+    $("m-title").value = m.title || "";
+    $("m-year").value = m.year || "";
+    $("m-director").value = m.director || "";
+    $("m-genre").value = m.genre || "";
+    $("m-format").value = m.format || "DVD";
+    $("m-cover").value = m.cover || "";
+    $("m-description").value = m.description || "";
+    $("m-trailer").value = m.trailer_url || "";
+    $("m-review-scott").value = m.scott_review || "";
+    $("m-review-nicole").value = m.nicole_review || "";
+    $("m-notes").value = m.notes || "";
+    setRatingStars("scott-rating-stars", m.scott_rating || 0);
+    setRatingStars("nicole-rating-stars", m.nicole_rating || 0);
+    openModal("movie-modal");
+  }
+
+  async function saveMovie() {
+    if (!isAdmin()) { toast("Sign in to save", "error"); return; }
+    var id = $("movie-id").value;
+    var title = $("m-title").value.trim();
+    if (!title) { alert("Title is required."); return; }
+    var payload = {
+      title: title,
+      year: $("m-year").value ? parseInt($("m-year").value, 10) : null,
+      director: $("m-director").value.trim() || null,
+      genre: $("m-genre").value.trim() || null,
+      format: $("m-format").value,
+      cover: $("m-cover").value.trim() || null,
+      description: $("m-description").value.trim() || null,
+      trailer_url: $("m-trailer").value.trim() || null,
+      scott_rating: parseInt($("scott-rating-stars").dataset.value, 10) || 0,
+      scott_review: $("m-review-scott").value.trim() || null,
+      nicole_rating: parseInt($("nicole-rating-stars").dataset.value, 10) || 0,
+      nicole_review: $("m-review-nicole").value.trim() || null,
+      notes: $("m-notes").value.trim() || null
+    };
+    var btn = $("movie-save");
+    btn.disabled = true; btn.textContent = "Saving…";
+    var res;
+    if (id) {
+      res = await supabase.from("movies").update(payload).eq("id", id);
+    } else {
+      res = await supabase.from("movies").insert(payload);
+    }
+    btn.disabled = false; btn.textContent = "Save";
+    if (res.error) { toast("Save failed: " + res.error.message, "error"); return; }
+    closeModal("movie-modal");
+    await refresh();
+    toast("Movie saved", "success");
+  }
+
+  async function deleteMovie(id) {
+    if (!isAdmin()) { toast("Sign in to delete", "error"); return; }
+    var m = DB.movies.find(function (x) { return x.id === id; });
+    if (!m) return;
+    if (activeLoanFor(id)) { alert("This movie is currently on loan. Return it first."); return; }
+    if (!confirm('Delete "' + m.title + '"? This cannot be undone.')) return;
+    var res = await supabase.from("movies").delete().eq("id", id);
+    if (res.error) { toast("Delete failed: " + res.error.message, "error"); return; }
+    await refresh();
+    toast("Movie deleted", "success");
+  }
+
+  /* ============================================================
+     LOAN FLOW
+     ============================================================ */
+  function openLoanModal(movieId) {
+    var m = DB.movies.find(function (x) { return x.id === movieId; });
+    if (!m) return;
+    $("loan-movie-id").value = movieId;
+    $("loan-movie-name").textContent = '"' + m.title + '" (' + m.format + ")";
+    $("l-borrower").value = "";
+    $("l-contact").value = "";
+    $("l-notes").value = "";
+    var today = todayStr();
+    $("l-start").value = today;
+    var d = new Date(); d.setDate(d.getDate() + 14);
+    $("l-due").value = d.toISOString().slice(0, 10);
+    openModal("loan-modal");
+    setTimeout(function () { $("l-borrower").focus(); }, 50);
+  }
+
+  async function saveLoan() {
+    var movieId = $("loan-movie-id").value;
+    var borrower = $("l-borrower").value.trim();
+    var startDate = $("l-start").value || todayStr();
+    var dueDate = $("l-due").value || null;
+    if (!borrower) { alert("Your name is required."); return; }
+    if (dueDate && dueDate < startDate) { alert("Return date cannot be before the start date."); return; }
+
+    var conflict = overlappingLoan(movieId, startDate, dueDate);
+    if (conflict) {
+      var conflictMovie = DB.movies.find(function (x) { return x.id === movieId; });
+      var conflictWho = isAdmin() ? (" by " + conflict.borrower) : "";
+      var conflictEnd = conflict.due_date || "an indefinite date";
+      alert('Sorry — "' + (conflictMovie ? conflictMovie.title : "this movie") +
+        '" is already booked' + conflictWho + " from " +
+        (conflict.start_date || conflict.loan_date) + " to " + conflictEnd +
+        ". Pick different dates.");
+      return;
+    }
+
+    var payload = {
+      movie_id: movieId,
+      borrower: borrower,
+      contact: $("l-contact").value.trim() || null,
+      start_date: startDate,
+      loan_date: todayStr(),
+      due_date: dueDate,
+      notes: $("l-notes").value.trim() || null
+    };
+    var btn = $("loan-save");
+    btn.disabled = true; btn.textContent = "Recording…";
+    var res = await supabase.from("loans").insert(payload);
+    btn.disabled = false; btn.textContent = "Confirm Loan";
+    if (res.error) { toast("Loan failed: " + res.error.message, "error"); return; }
+    closeModal("loan-modal");
+    closeModal("details-modal");
+    await refresh();
+    toast(startDate > todayStr() ? "Reservation recorded" : "Loan recorded — enjoy!", "success");
+  }
+
+  async function returnMovie(movieId) {
+    if (!isAdmin()) { toast("Only the owner can mark movies returned", "error"); return; }
+    var loan = activeLoanFor(movieId);
+    if (!loan) {
+      loan = DB.loans.find(function (l) { return l.movie_id === movieId && !l.returned_date; });
+    }
+    if (!loan) return;
+    var movie = DB.movies.find(function (m) { return m.id === movieId; });
+    if (!confirm('Mark "' + (movie ? movie.title : "movie") + '" as returned?')) return;
+    var res = await supabase.from("loans").update({ returned_date: todayStr() }).eq("id", loan.id);
+    if (res.error) { toast("Return failed: " + res.error.message, "error"); return; }
+    await refresh();
+    toast("Movie returned", "success");
+  }
+
+  /* ============================================================
+     LIST CRUD
+     ============================================================ */
+  function openNewListModal() {
+    if (!isAdmin()) { toast("Sign in to create lists", "error"); return; }
+    $("list-modal-title").textContent = "New List";
+    $("list-id").value = "";
+    $("list-name").value = "";
+    $("list-description").value = "";
+    pendingListMovies = [];
+    populateListMovieSelect();
+    renderPendingListMovies();
+    openModal("list-modal");
+    setTimeout(function () { $("list-name").focus(); }, 50);
+  }
+
+  function openEditListModal(listId) {
+    if (!isAdmin()) { toast("Sign in to edit lists", "error"); return; }
+    var lst = DB.lists.find(function (x) { return x.id === listId; });
+    if (!lst) return;
+    $("list-modal-title").textContent = "Edit List";
+    $("list-id").value = lst.id;
+    $("list-name").value = lst.name || "";
+    $("list-description").value = lst.description || "";
+    pendingListMovies = DB.list_movies
+      .filter(function (lm) { return lm.list_id === listId; })
+      .sort(function (a, b) { return (a.position || 0) - (b.position || 0); })
+      .map(function (lm) { return lm.movie_id; });
+    populateListMovieSelect();
+    renderPendingListMovies();
+    openModal("list-modal");
+  }
+
+  function populateListMovieSelect() {
+    var sel = $("list-add-movie");
+    var sorted = DB.movies.slice().sort(function (a, b) { return a.title.localeCompare(b.title); });
+    sel.innerHTML = '<option value="">— Select a movie —</option>' +
+      sorted.map(function (m) {
+        var already = pendingListMovies.indexOf(m.id) !== -1;
+        return '<option value="' + m.id + '"' + (already ? " disabled" : "") + ">" +
+          esc(m.title) + (m.year ? " (" + m.year + ")" : "") +
+          (already ? " — already added" : "") +
+        "</option>";
+      }).join("");
+  }
+
+  function renderPendingListMovies() {
+    var container = $("list-current-movies");
+    if (!pendingListMovies.length) {
+      container.innerHTML = '<span class="list-empty">No movies added yet.</span>';
+      return;
+    }
+    container.innerHTML = pendingListMovies.map(function (mid) {
+      var m = DB.movies.find(function (x) { return x.id === mid; });
+      if (!m) return "";
+      return '<span class="list-movie-chip">' +
+        esc(m.title) +
+        '<span class="remove" data-remove-pending="' + mid + '" title="Remove">×</span>' +
+      "</span>";
+    }).join("");
+  }
+
+  async function saveList() {
+    if (!isAdmin()) { toast("Sign in to save lists", "error"); return; }
+    var id = $("list-id").value;
+    var name = $("list-name").value.trim();
+    if (!name) { alert("List name is required."); return; }
+    var description = $("list-description").value.trim() || null;
+
+    var btn = $("list-save");
+    btn.disabled = true; btn.textContent = "Saving…";
+
+    var listId = id;
+    if (id) {
+      var upRes = await supabase.from("lists").update({ name: name, description: description }).eq("id", id);
+      if (upRes.error) { btn.disabled = false; btn.textContent = "Save List"; toast("Save failed: " + upRes.error.message, "error"); return; }
+    } else {
+      var inRes = await supabase.from("lists").insert({ name: name, description: description }).select().single();
+      if (inRes.error) { btn.disabled = false; btn.textContent = "Save List"; toast("Save failed: " + inRes.error.message, "error"); return; }
+      listId = inRes.data.id;
+    }
+
+    // Replace list_movies wholesale: delete all, reinsert in pending order.
+    var delRes = await supabase.from("list_movies").delete().eq("list_id", listId);
+    if (delRes.error) { btn.disabled = false; btn.textContent = "Save List"; toast("Save failed: " + delRes.error.message, "error"); return; }
+
+    if (pendingListMovies.length) {
+      var rows = pendingListMovies.map(function (mid, idx) {
+        return { list_id: listId, movie_id: mid, position: idx };
+      });
+      var insRes = await supabase.from("list_movies").insert(rows);
+      if (insRes.error) { btn.disabled = false; btn.textContent = "Save List"; toast("Save failed: " + insRes.error.message, "error"); return; }
+    }
+
+    btn.disabled = false; btn.textContent = "Save List";
+    closeModal("list-modal");
+    await refresh();
+    toast("List saved", "success");
+  }
+
+  async function deleteList(listId) {
+    if (!isAdmin()) { toast("Sign in to delete lists", "error"); return; }
+    var lst = DB.lists.find(function (x) { return x.id === listId; });
+    if (!lst) return;
+    if (!confirm('Delete list "' + lst.name + '"? Movies themselves are not deleted.')) return;
+    var res = await supabase.from("lists").delete().eq("id", listId);
+    if (res.error) { toast("Delete failed: " + res.error.message, "error"); return; }
+    await refresh();
+    toast("List deleted", "success");
+  }
+
+  async function removeFromList(listMovieId) {
+    if (!isAdmin()) { toast("Sign in to edit lists", "error"); return; }
+    var res = await supabase.from("list_movies").delete().eq("id", listMovieId);
+    if (res.error) { toast("Remove failed: " + res.error.message, "error"); return; }
+    await refresh();
+    toast("Removed from list", "success");
+  }
+
+  /* ============================================================
+     COVER / SYNOPSIS FETCHERS
+     ============================================================ */
+  async function tmdbLookup(title, year) {
+    if (!Settings.tmdbKey) throw new Error("Set your TMDb key in Settings first");
+    var url = "https://api.themoviedb.org/3/search/movie?api_key=" + encodeURIComponent(Settings.tmdbKey) +
+              "&query=" + encodeURIComponent(title) + (year ? "&year=" + year : "");
+    var res = await fetch(url);
+    if (!res.ok) throw new Error("TMDb returned " + res.status);
+    var data = await res.json();
+    if (!data.results || !data.results.length) throw new Error("No TMDb match for that title");
+    return data.results[0];
+  }
+
+  async function fetchFanartCover() {
+    var title = $("m-title").value.trim();
+    var year = $("m-year").value.trim();
+    if (!title) { toast("Enter a title first", "error"); return; }
+    if (!Settings.tmdbKey || !Settings.fanartKey) {
+      toast("Set your TMDb and fanart.tv keys in Settings first", "error");
+      return;
+    }
+    var btn = $("btn-fetch-cover");
+    btn.disabled = true; btn.textContent = "Fetching…";
+    try {
+      var result = await tmdbLookup(title, year);
+      var tmdbId = result.id;
+      if (result.overview) $("m-description").value = result.overview;
+      var fanartUrl = "https://webservice.fanart.tv/v3/movies/" + tmdbId + "?api_key=" + encodeURIComponent(Settings.fanartKey);
+      var fanartRes = await fetch(fanartUrl);
+      if (!fanartRes.ok) throw new Error("fanart.tv returned " + fanartRes.status);
+      var fanartData = await fanartRes.json();
+      var posters = fanartData.movieposter || [];
+      if (!posters.length) throw new Error("No posters on fanart.tv");
+      var english = posters.filter(function (p) { return p.lang === "en"; });
+      var candidates = english.length ? english : posters;
+      candidates.sort(function (a, b) { return parseInt(b.likes || 0, 10) - parseInt(a.likes || 0, 10); });
+      $("m-cover").value = candidates[0].url;
+      toast("Cover + synopsis fetched", "success");
+    } catch (err) {
+      toast("Fetch failed: " + err.message, "error");
+    } finally {
+      btn.disabled = false; btn.textContent = "Fetch Cover + Synopsis (TMDb/fanart.tv)";
+    }
+  }
+
+  async function fetchSynopsis() {
+    var title = $("m-title").value.trim();
+    var year = $("m-year").value.trim();
+    if (!title) { toast("Enter a title first", "error"); return; }
+    if (!Settings.tmdbKey) { toast("Set your TMDb key in Settings first", "error"); return; }
+    var btn = $("btn-fetch-synopsis");
+    btn.disabled = true; btn.textContent = "Fetching…";
+    try {
+      var result = await tmdbLookup(title, year);
+      if (!result.overview) throw new Error("TMDb has no synopsis for that title");
+      $("m-description").value = result.overview;
+      toast("Synopsis fetched from TMDb", "success");
+    } catch (err) {
+      toast("Synopsis fetch failed: " + err.message, "error");
+    } finally {
+      btn.disabled = false; btn.textContent = "Fetch Synopsis (TMDb)";
+    }
+  }
+
+  async function fetchWikidataCover() {
+    var title = $("m-title").value.trim();
+    if (!title) { toast("Enter a title first", "error"); return; }
+    var btn = $("btn-fetch-wikidata");
+    btn.disabled = true; btn.textContent = "Searching…";
+    try {
+      var searchUrl = "https://www.wikidata.org/w/api.php?action=wbsearchentities&search=" +
+                      encodeURIComponent(title) + "&language=en&format=json&type=item&limit=5&origin=*";
+      var searchRes = await fetch(searchUrl);
+      if (!searchRes.ok) throw new Error("Wikidata search returned " + searchRes.status);
+      var searchData = await searchRes.json();
+      if (!searchData.search || !searchData.search.length) throw new Error("No Wikidata match");
+      var posterUrl = null;
+      for (var i = 0; i < searchData.search.length; i++) {
+        var qid = searchData.search[i].id;
+        var claimsUrl = "https://www.wikidata.org/w/api.php?action=wbgetclaims&entity=" +
+                        qid + "&property=P3383&format=json&origin=*";
+        var claimsRes = await fetch(claimsUrl);
+        if (!claimsRes.ok) continue;
+        var claimsData = await claimsRes.json();
+        var claims = claimsData.claims && claimsData.claims.P3383;
+        if (!claims || !claims.length) continue;
+        var filename = claims[0].mainsnak.datavalue.value;
+        if (!filename) continue;
+        var infoUrl = "https://commons.wikimedia.org/w/api.php?action=query&titles=File:" +
+                      encodeURIComponent(filename) + "&prop=imageinfo&iiprop=url&format=json&origin=*";
+        var infoRes = await fetch(infoUrl);
+        if (!infoRes.ok) continue;
+        var infoData = await infoRes.json();
+        var pages = infoData.query && infoData.query.pages;
+        if (!pages) continue;
+        var page = Object.values(pages)[0];
+        if (page.imageinfo && page.imageinfo.length) {
+          posterUrl = page.imageinfo[0].url;
+          break;
+        }
+      }
+      if (!posterUrl) throw new Error("No film poster found on Wikidata");
+      $("m-cover").value = posterUrl;
+      toast("Cover fetched from Wikidata", "success");
+    } catch (err) {
+      toast("Wikidata fetch failed: " + err.message, "error");
+    } finally {
+      btn.disabled = false; btn.textContent = "Fetch Cover from Wikidata (no key)";
+    }
+  }
+
+  /* ============================================================
+     SETTINGS
+     ============================================================ */
+  function loadSettingsIntoForm() {
+    $("setting-tmdb").value = Settings.tmdbKey || "";
+    $("setting-fanart").value = Settings.fanartKey || "";
+  }
+
+  /* ============================================================
+     BACKUP / IMPORT
+     ============================================================ */
+  async function exportData() {
+    try {
+      await loadFromSupabase();
+      var blob = new Blob([JSON.stringify(DB, null, 2)], { type: "application/json" });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = url;
+      a.download = "movie-library-backup-" + new Date().toISOString().slice(0, 10) + ".json";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      toast("Export failed: " + err.message, "error");
+    }
+  }
+
+  async function handleImport(e) {
+    if (!isAdmin()) { toast("Sign in to import", "error"); e.target.value = ""; return; }
+    var file = e.target.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = async function (evt) {
+      try {
+        var data = JSON.parse(evt.target.result);
+        if (!data.movies || !Array.isArray(data.movies)) throw new Error("Invalid format");
+        if (!confirm("This will ADD " + data.movies.length + " movies to your Supabase library. Continue?")) {
+          e.target.value = ""; return;
+        }
+        var rows = data.movies.map(function (m) {
+          return {
+            title: m.title,
+            year: m.year || null,
+            director: m.director || null,
+            genre: m.genre || null,
+            format: m.format || "DVD",
+            cover: m.cover || null,
+            description: m.description || null,
+            trailer_url: m.trailer_url || m.trailerUrl || null,
+            scott_rating: m.scott_rating || m.scottRating || m.personalRating || 0,
+            scott_review: m.scott_review || m.scottReview || m.personalReview || null,
+            nicole_rating: m.nicole_rating || m.nicoleRating || 0,
+            nicole_review: m.nicole_review || m.nicoleReview || null,
+            notes: m.notes || null
+          };
+        });
+        var res = await supabase.from("movies").insert(rows);
+        if (res.error) throw new Error(res.error.message);
+        await refresh();
+        closeModal("data-modal");
+        toast("Imported " + rows.length + " movies", "success");
+      } catch (err) {
+        alert("Import failed: " + err.message);
+      }
+      e.target.value = "";
+    };
+    reader.readAsText(file);
+  }
+
+  /* ============================================================
+     TAB SWITCHING
+     ============================================================ */
+  function switchTab(tab) {
+    document.querySelectorAll(".tab").forEach(function (t) {
+      t.classList.toggle("active", t.dataset.tab === tab);
+    });
+    ["library","loans","lists","settings"].forEach(function (v) {
+      var el = $("view-" + v);
+      if (el) el.style.display = v === tab ? "block" : "none";
+    });
+    if (tab === "library") renderLibrary();
+    if (tab === "loans") renderLoans();
+    if (tab === "lists") renderLists();
+    if (tab === "settings") loadSettingsIntoForm();
+  }
+
+  /* ============================================================
+     EVENT BINDINGS
+     ============================================================ */
+  function bind() {
+    document.querySelectorAll(".tab[data-tab]").forEach(function (t) {
+      t.addEventListener("click", function () { switchTab(t.dataset.tab); });
+    });
+
+    $("btn-add-movie").addEventListener("click", openAddModal);
+    $("btn-add-list").addEventListener("click", openNewListModal);
+    $("btn-data").addEventListener("click", function () { openModal("data-modal"); });
+
+    ["search","filter-format","filter-status","sort"].forEach(function (id) {
+      $(id).addEventListener("input", renderLibrary);
+      $(id).addEventListener("change", renderLibrary);
+    });
+
+    $("movie-cancel").addEventListener("click", function () { closeModal("movie-modal"); });
+    $("movie-save").addEventListener("click", saveMovie);
+    $("btn-fetch-cover").addEventListener("click", fetchFanartCover);
+    $("btn-fetch-synopsis").addEventListener("click", fetchSynopsis);
+    $("btn-fetch-wikidata").addEventListener("click", fetchWikidataCover);
+
+    $("details-close").addEventListener("click", function () { closeModal("details-modal"); });
+    $("details-edit").addEventListener("click", function () {
+      if (this.dataset.id) openEditModal(this.dataset.id);
+    });
+    $("details-loan").addEventListener("click", function () {
+      var id = this.dataset.id;
+      if (!id) return;
+      closeModal("details-modal");
+      openLoanModal(id);
+    });
+
+    $("loan-cancel").addEventListener("click", function () { closeModal("loan-modal"); });
+    $("loan-save").addEventListener("click", saveLoan);
+
+    $("list-cancel").addEventListener("click", function () { closeModal("list-modal"); });
+    $("list-save").addEventListener("click", saveList);
+    $("btn-add-movie-to-list").addEventListener("click", function () {
+      var sel = $("list-add-movie");
+      var mid = sel.value;
+      if (!mid) { toast("Select a movie first", "error"); return; }
+      if (pendingListMovies.indexOf(mid) === -1) pendingListMovies.push(mid);
+      renderPendingListMovies();
+      populateListMovieSelect();
+    });
+    $("list-current-movies").addEventListener("click", function (e) {
+      var rm = e.target.closest("[data-remove-pending]");
+      if (!rm) return;
+      var mid = rm.dataset.removePending;
+      pendingListMovies = pendingListMovies.filter(function (x) { return x !== mid; });
+      renderPendingListMovies();
+      populateListMovieSelect();
+    });
+
+    $("btn-export").addEventListener("click", exportData);
+    $("data-close").addEventListener("click", function () { closeModal("data-modal"); });
+    $("import-file").addEventListener("change", handleImport);
+
+    $("btn-save-settings").addEventListener("click", function () {
+      Settings.tmdbKey = $("setting-tmdb").value.trim();
+      Settings.fanartKey = $("setting-fanart").value.trim();
+      saveSettings(Settings);
+      toast("Keys saved", "success");
+    });
+    $("btn-clear-settings").addEventListener("click", function () {
+      Settings = {};
+      saveSettings(Settings);
+      loadSettingsIntoForm();
+      toast("Keys cleared", "success");
+    });
+
+    $("btn-sign-in").addEventListener("click", signIn);
+    $("btn-sign-up").addEventListener("click", signUp);
+    $("btn-sign-out").addEventListener("click", signOut);
+
+    ["scott-rating-stars","nicole-rating-stars"].forEach(function (elId) {
+      $(elId).addEventListener("click", function (e) {
+        var span = e.target.closest("span[data-v]");
+        if (!span) return;
+        setRatingStars(elId, parseInt(span.dataset.v, 10));
+      });
+    });
+
+    document.querySelectorAll(".modal-backdrop").forEach(function (bd) {
+      bd.addEventListener("click", function (e) {
+        if (e.target === bd) bd.classList.remove("open");
+      });
+    });
+
+    $("library-grid").addEventListener("click", function (e) {
+      var btn = e.target.closest("button");
+      if (btn) {
+        if (btn.disabled) return;
+        if (btn.dataset.loan)   { openLoanModal(btn.dataset.loan); return; }
+        if (btn.dataset.edit)   { openEditModal(btn.dataset.edit); return; }
+        if (btn.dataset.delete) { deleteMovie(btn.dataset.delete); return; }
+        if (btn.dataset.return) { returnMovie(btn.dataset.return); return; }
+        return;
+      }
+      var card = e.target.closest(".card[data-details]");
+      if (card) showDetails(card.dataset.details);
+    });
+
+    $("loans-container").addEventListener("click", function (e) {
+      var b = e.target.closest("button");
+      if (b && b.dataset.return) returnMovie(b.dataset.return);
+    });
+
+    $("lists-container").addEventListener("click", function (e) {
+      var rm = e.target.closest("[data-remove-from-list]");
+      if (rm) { e.stopPropagation(); removeFromList(rm.dataset.removeFromList); return; }
+      var edit = e.target.closest("[data-edit-list]");
+      if (edit) { e.stopPropagation(); openEditListModal(edit.dataset.editList); return; }
+      var del = e.target.closest("[data-delete-list]");
+      if (del) { e.stopPropagation(); deleteList(del.dataset.deleteList); return; }
+      var chip = e.target.closest("[data-details]");
+      if (chip) { showDetails(chip.dataset.details); return; }
+    });
+
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") {
+        document.querySelectorAll(".modal-backdrop.open").forEach(function (bd) {
+          bd.classList.remove("open");
+        });
+      }
+    });
+  }
+
+  /* ============================================================
+     INIT
+     ============================================================ */
+  (async function init() {
+    if (SUPABASE_URL.indexOf("PASTE_") === 0 || SUPABASE_KEY.indexOf("PASTE_") === 0) {
+      document.body.innerHTML =
+        '<div style="max-width:600px;margin:80px auto;padding:24px;background:#1a1f27;border:1px solid #2d3642;border-radius:12px;color:#e6edf3;font-family:sans-serif">' +
+        "<h2>Configuration needed</h2>" +
+        "<p>Open this file in a text editor and replace:</p>" +
+        "<pre style='background:#0f1216;padding:12px;border-radius:8px'>var SUPABASE_URL = \"PASTE_YOUR_SUPABASE_URL_HERE\";\nvar SUPABASE_KEY = \"PASTE_YOUR_PUBLISHABLE_KEY_HERE\";</pre>" +
+        "<p>with your Supabase project URL and Publishable key.</p>" +
+        "</div>";
+      return;
+    }
+    bind();
+    await initAuth();
+    updateAuthUi();
+    await refresh();
+  })();
+})();
+</script>
 </body>
 </html>
