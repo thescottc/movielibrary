@@ -657,6 +657,61 @@
     return list;
   }
 
+   /* ============================================================
+     FEATURED MOVIE
+     ============================================================ */
+  function pickFeatured() {
+    if (!DB.movies.length) return null;
+    var pool = DB.movies.filter(function (m) { return m.description || m.cover; });
+    if (!pool.length) pool = DB.movies;
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+
+  function renderFeatured(forceNew) {
+    var el = $("featured-banner");
+    if (!el) return;
+    if (!DB.movies.length) { el.innerHTML = ""; return; }
+
+    if (!forceNew && el.dataset.movieId) {
+      var existing = DB.movies.find(function (m) { return m.id === el.dataset.movieId; });
+      if (existing) { paintFeatured(el, existing); return; }
+    }
+    var pick = pickFeatured();
+    if (pick) { el.dataset.movieId = pick.id; paintFeatured(el, pick); }
+  }
+
+  function paintFeatured(el, m) {
+    var coverStyle = m.cover ? 'style="background-image:url(\'' + esc(m.cover) + '\')"' : "";
+    var scott = m.scott_rating ? "★ " + m.scott_rating + "/5" : "not rated";
+    var nicole = m.nicole_rating ? "★ " + m.nicole_rating + "/5" : "not rated";
+    var desc = m.description
+      ? (m.description.length > 280 ? m.description.slice(0, 277) + "…" : m.description)
+      : "No description yet.";
+    el.innerHTML =
+      '<div class="featured">' +
+        '<div class="featured-poster" ' + coverStyle + '>' + (m.cover ? "" : "🎞️") + "</div>" +
+        '<div class="featured-info">' +
+          '<div class="featured-label">Featured tonight</div>' +
+          '<h2 data-details="' + m.id + '">' + esc(m.title) +
+            (m.year ? " (" + esc(m.year) + ")" : "") + "</h2>" +
+          '<div class="featured-meta">' +
+            esc(m.format) + (m.genre ? " · " + esc(m.genre) : "") +
+            (m.director ? " · Dir. " + esc(m.director) : "") +
+          "</div>" +
+          '<div class="featured-desc">' + esc(desc) + "</div>" +
+          '<div class="featured-scores">' +
+            '<span><span class="score-label">Scott:</span> ' + esc(scott) + "</span>" +
+            '<span><span class="score-label">Nicole:</span> ' + esc(nicole) + "</span>" +
+          "</div>" +
+          '<button type="button" class="featured-refresh" id="btn-featured-refresh">🎲 Pick another</button>' +
+        "</div>" +
+      "</div>";
+    var btn = $("btn-featured-refresh");
+    if (btn) btn.addEventListener("click", function () { renderFeatured(true); });
+    var title = el.querySelector("h2[data-details]");
+    if (title) title.addEventListener("click", function () { showDetails(m.id); });
+  }
+  
   function renderLibrary() {
     renderGenreFilter();
     renderFeatured(false);
