@@ -110,6 +110,19 @@
   .list-empty{color:var(--muted);font-size:.8rem;font-style:italic}
   .list-actions{display:flex;gap:6px}
 
+  .genre-filter{position:relative}
+  .genre-filter-toggle{background:var(--panel);border:1px solid var(--border);color:var(--text);padding:9px 14px;border-radius:var(--radius);cursor:pointer;font-size:.9rem;display:flex;align-items:center;gap:6px}
+  .genre-filter-toggle:hover{border-color:var(--accent)}
+  .genre-count{background:var(--accent);color:#fff;font-size:.7rem;padding:1px 7px;border-radius:20px;font-weight:700;display:none}
+  .genre-count.on{display:inline-block}
+  .genre-filter-panel{display:none;position:absolute;top:calc(100% + 6px);left:0;background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:12px;z-index:50;min-width:240px;max-height:320px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.4)}
+  .genre-filter-panel.open{display:block}
+  .genre-filter-list label{display:flex;align-items:center;gap:8px;padding:5px 4px;font-size:.85rem;cursor:pointer;border-radius:6px}
+  .genre-filter-list label:hover{background:var(--panel-2)}
+  .genre-filter-list input[type=checkbox]{accent-color:var(--accent);cursor:pointer}
+  .genre-filter-actions{margin-top:10px;padding-top:10px;border-top:1px solid var(--border);display:flex;justify-content:flex-end}
+  .genre-empty{color:var(--muted);font-size:.8rem;font-style:italic}
+  
   @media(max-width:600px){.form-grid{grid-template-columns:1fr}.details-layout{grid-template-columns:1fr}.details-poster{max-width:180px}header h1{font-size:1rem}.tab{padding:6px 10px;font-size:.8rem}}
 </style>
 </head>
@@ -136,6 +149,17 @@
     </div>
     <div class="toolbar">
       <input class="search" type="text" id="search" placeholder="🔍 Search title, director, genre…">
+            <div class="genre-filter" id="genre-filter">
+        <button type="button" class="genre-filter-toggle" id="genre-filter-toggle">
+          Genres <span class="genre-count" id="genre-count"></span> ▾
+        </button>
+        <div class="genre-filter-panel" id="genre-filter-panel">
+          <div class="genre-filter-list" id="genre-filter-list"></div>
+          <div class="genre-filter-actions">
+            <button type="button" class="btn secondary small" id="genre-clear">Clear all</button>
+          </div>
+        </div>
+      </div>
       <select id="filter-format">
         <option value="">All Formats</option>
         <option>VHS</option><option>DVD</option><option>Blu-Ray</option><option>4K</option>
@@ -537,6 +561,75 @@
     renderLists();
   }
 
+    /* ============================================================
+     GENRE FILTER
+     ============================================================ */
+  var selectedGenres = new Set();
+  var genrePanelOpen = false;
+
+  function genreTags(movie) {
+    if (!movie.genre) return [];
+    return movie.genre
+      .split(/[,/&]/)
+      .map(function (t) { return t.trim(); })
+      .filter(function (t) { return t.length > 0; });
+  }
+
+  function allGenreTags() {
+    var seen = {};
+    DB.movies.forEach(function (m) {
+      genreTags(m).forEach(function (t) {
+        var key = t.toLowerCase();
+        if (!seen[key]) seen[key] = t;
+      });
+    });
+    return Object.keys(seen).sort().map(function (k) { return seen[k]; });
+  }
+
+  function movieMatchesGenres(movie) {
+    if (selectedGenres.size === 0) return true;
+    var tags = genreTags(movie).map(function (t) { return t.toLowerCase(); });
+    // OR semantics: movie matches if ANY selected genre is present.
+    // For AND semantics, change `some` to `every` below.
+    return Array.from(selectedGenres).some(function (g) { return tags.indexOf(g) !== -1; });
+  }
+
+  function renderGenreFilter() {
+    var list = $("genre-filter-list");
+    var tags = allGenreTags();
+    if (!tags.length) {
+      list.innerHTML = '<div class="genre-empty">No genres in your collection yet.</div>';
+    } else {
+      list.innerHTML = tags.map(function (t) {
+        var key = t.toLowerCase();
+        var checked = selectedGenres.has(key) ? " checked" : "";
+        return '<label><input type="checkbox" data-genre="' + esc(key) + '"' + checked + "> " + esc(t) + "</label>";
+      }).join("");
+    }
+    var count = $("genre-count");
+    if (selectedGenres.size > 0) {
+      count.textContent = selectedGenres.size;
+      count.className = "genre-count on";
+    } else {
+      count.textContent = "";
+      count.className = "genre-count";
+    }
+    var panel = $("genre-filter-panel");
+    panel.classList.toggle("open", genrePanelOpen);
+  }
+
+    /* ============================================================
+     SORT TITLE — ignore leading articles
+     ============================================================ */
+  function sortTitle(title) {
+    if (!title) return "";
+    // Strip leading articles (English + a few common ones), case-insensitive.
+    // Matches "The Matrix", "A Clockwork Orange", "An American Werewolf…", etc.
+    return title
+      .replace(/^(the|a|an|le|la|les|el|los|las|der|die|das)\s+/i, "")
+      .toLowerCase();
+  }
+  
   function getFilteredMovies() {
     var q = $("search").value.toLowerCase().trim();
     var fmt = $("filter-format").value;
@@ -546,6 +639,7 @@
       var hay = (m.title + " " + (m.director || "") + " " + (m.genre || "")).toLowerCase();
       if (q && hay.indexOf(q) === -1) return false;
       if (fmt && m.format !== fmt) return false;
+      if (!movieMatchesGenres(m)) return false;
       if (status === "available" && !isMovieAvailableNow(m.id)) return false;
       if (status === "loaned" && !activeLoanFor(m.id)) return false;
       if (status === "reserved" && !reservationFor(m.id)) return false;
@@ -553,7 +647,7 @@
     });
     list.sort(function (a, b) {
       switch (sort) {
-        case "title-asc": return a.title.localeCompare(b.title);
+        case "title-asc": return sortTitle(a.title).localeCompare(sortTitle(b.title));
         case "year-desc": return (b.year || 0) - (a.year || 0);
         case "year-asc":  return (a.year || 0) - (b.year || 0);
         default: return new Date(b.added_at || 0) - new Date(a.added_at || 0);
@@ -563,6 +657,7 @@
   }
 
   function renderLibrary() {
+    renderGenreFilter();
     var total = DB.movies.length;
     var loaned = DB.movies.filter(function (m) { return activeLoanFor(m.id); }).length;
     var overdue = DB.loans.filter(function (l) {
@@ -996,7 +1091,7 @@
 
   function populateListMovieSelect() {
     var sel = $("list-add-movie");
-    var sorted = DB.movies.slice().sort(function (a, b) { return a.title.localeCompare(b.title); });
+    var sorted = DB.movies.slice().sort(function (a, b) { return sortTitle(a.title).localeCompare(sortTitle(b.title)); });
     sel.innerHTML = '<option value="">— Select a movie —</option>' +
       sorted.map(function (m) {
         var already = pendingListMovies.indexOf(m.id) !== -1;
@@ -1292,6 +1387,34 @@
     ["search","filter-format","filter-status","sort"].forEach(function (id) {
       $(id).addEventListener("input", renderLibrary);
       $(id).addEventListener("change", renderLibrary);
+    });
+
+    $("genre-filter-toggle").addEventListener("click", function (e) {
+      e.stopPropagation();
+      genrePanelOpen = !genrePanelOpen;
+      $("genre-filter-panel").classList.toggle("open", genrePanelOpen);
+    });
+
+    $("genre-filter-list").addEventListener("change", function (e) {
+      var cb = e.target.closest("input[data-genre]");
+      if (!cb) return;
+      var key = cb.dataset.genre;
+      if (cb.checked) selectedGenres.add(key);
+      else selectedGenres.delete(key);
+      renderLibrary();
+    });
+
+    $("genre-clear").addEventListener("click", function (e) {
+      e.stopPropagation();
+      selectedGenres.clear();
+      renderLibrary();
+    });
+
+    document.addEventListener("click", function (e) {
+      if (!genrePanelOpen) return;
+      if (e.target.closest("#genre-filter")) return;
+      genrePanelOpen = false;
+      $("genre-filter-panel").classList.remove("open");
     });
 
     $("movie-cancel").addEventListener("click", function () { closeModal("movie-modal"); });
