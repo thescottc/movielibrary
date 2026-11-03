@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Welcome to Cockbuster Video</title>
+<title>Welcome to Home Run Video</title>
 <style>
   :root{--bg:#0f1216;--panel:#1a1f27;--panel-2:#232a35;--border:#2d3642;--text:#e6edf3;--muted:#8b98a8;--accent:#4f8cff;--accent-2:#6ee7b7;--danger:#ff6b6b;--warn:#fbbf24;--radius:10px}
   *{box-sizing:border-box}
@@ -153,7 +153,8 @@
 <body>
 
 <header>
-  <h1>🎬 <span>Cockbuster</span> Video</h1>
+  <img src="https://i.ibb.co/wNW3KrG0/Smiling-Blue-Jays-Celebration-Couple.png" alt="Smiling-Blue-Jays-Celebration-Couple" border="0">
+  <h1>⚾️ <span>Home Run</span> Video 🎬</h1>
   <span class="admin-badge" id="admin-badge">ADMIN</span>
   <div class="tabs">
     <button class="tab active" data-tab="library">Library</button>
@@ -200,6 +201,10 @@
         <option value="title-asc">Title A–Z</option>
         <option value="year-desc">Year (Newest)</option>
         <option value="year-asc">Year (Oldest)</option>
+        <option value="scott-rating-desc">Scott's Rating (High–Low)</option>
+        <option value="scott-rating-asc">Scott's Rating (Low–High)</option>
+        <option value="nicole-rating-desc">Nicole's Rating (High–Low)</option>
+        <option value="nicole-rating-asc">Nicole's Rating (Low–High)</option>
       </select>
       <button class="btn" id="btn-add-movie" style="display:none">+ Add Movie</button>
       <button class="btn secondary" id="btn-data" style="display:none">Backup</button>
@@ -675,6 +680,20 @@
         case "title-asc": return sortTitle(a.title).localeCompare(sortTitle(b.title));
         case "year-desc": return (b.year || 0) - (a.year || 0);
         case "year-asc":  return (a.year || 0) - (b.year || 0);
+        case "scott-rating-desc":
+        case "scott-rating-asc":
+        case "nicole-rating-desc":
+        case "nicole-rating-asc": {
+          var field = sort.indexOf("scott") === 0 ? "scott_rating" : "nicole_rating";
+          var desc = sort.indexOf("-desc") !== -1;
+          var ra = a[field] || 0;
+          var rb = b[field] || 0;
+          // Unrated (0) always sinks to the bottom regardless of direction
+          if (ra === 0 && rb !== 0) return 1;
+          if (rb === 0 && ra !== 0) return -1;
+          if (ra !== rb) return desc ? rb - ra : ra - rb;
+          return sortTitle(a.title).localeCompare(sortTitle(b.title));
+        }
         default: return new Date(b.added_at || 0) - new Date(a.added_at || 0);
       }
     });
