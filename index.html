@@ -1306,31 +1306,43 @@
     return data.results[0];
   }
 
-  async function fetchFanartCover() {
+    async function fetchFanartCover() {
     var title = $("m-title").value.trim();
     var year = $("m-year").value.trim();
     if (!title) { toast("Enter a title first", "error"); return; }
-    if (!Settings.tmdbKey || !Settings.fanartKey) {
-      toast("Set your TMDb and fanart.tv keys in Settings first", "error");
+    if (!Settings.tmdbKey) {
+      toast("Set your TMDb key in Settings first", "error");
       return;
     }
     var btn = $("btn-fetch-cover");
     btn.disabled = true; btn.textContent = "Fetching…";
     try {
       var result = await tmdbLookup(title, year);
-      var tmdbId = result.id;
       if (result.overview) $("m-description").value = result.overview;
-      var fanartUrl = "https://webservice.fanart.tv/v3/movies/" + tmdbId + "?api_key=" + encodeURIComponent(Settings.fanartKey);
+
+      // Prefer TMDb poster — sized, reliable, smaller
+      if (result.poster_path) {
+        $("m-cover").value = "https://image.tmdb.org/t/p/w342" + result.poster_path;
+        toast("Cover + synopsis fetched (TMDb)", "success");
+        return;
+      }
+
+      // Fall back to fanart.tv only when TMDb has no poster
+      if (!Settings.fanartKey) {
+        throw new Error("No TMDb poster, and no fanart.tv key configured");
+      }
+      var fanartUrl = "https://webservice.fanart.tv/v3/movies/" + result.id +
+                      "?api_key=" + encodeURIComponent(Settings.fanartKey);
       var fanartRes = await fetch(fanartUrl);
-      if (!fanartRes.ok) throw new Error("fanart.tv returned " + fanartRes.status);
+      if (!fanartRes.ok) throw new Error("No TMDb poster, and fanart.tv returned " + fanartRes.status);
       var fanartData = await fanartRes.json();
       var posters = fanartData.movieposter || [];
-      if (!posters.length) throw new Error("No posters on fanart.tv");
+      if (!posters.length) throw new Error("No poster found on TMDb or fanart.tv");
       var english = posters.filter(function (p) { return p.lang === "en"; });
       var candidates = english.length ? english : posters;
       candidates.sort(function (a, b) { return parseInt(b.likes || 0, 10) - parseInt(a.likes || 0, 10); });
       $("m-cover").value = candidates[0].url;
-      toast("Cover + synopsis fetched", "success");
+      toast("Cover + synopsis fetched (fanart.tv)", "success");
     } catch (err) {
       toast("Fetch failed: " + err.message, "error");
     } finally {
