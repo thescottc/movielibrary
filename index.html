@@ -149,7 +149,23 @@
   .format-link{color:var(--accent);text-decoration:none;font-weight:600}
   .format-link:hover{text-decoration:underline}
   .list-membership{display:inline-block;background:var(--panel-2);border:1px solid var(--border);border-radius:20px;padding:3px 10px;font-size:.78rem;margin:0 6px 6px 0;color:var(--text)}
-  @media(max-width:600px){.featured{grid-template-columns:110px 1fr;gap:16px;padding:16px}.featured h2{font-size:1.15rem}.featured-desc{font-size:.82rem}.featured-scores{gap:12px;font-size:.8rem}}
+  @media(max-width:600px){
+    .form-grid{grid-template-columns:1fr}
+    .details-layout{grid-template-columns:1fr}
+    .details-poster{max-width:180px}
+    header h1{font-size:1rem}
+    .tab{padding:6px 10px;font-size:.8rem}
+    /* new mobile grid rules */
+    .grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+    .card-body{padding:10px}
+    .card-title{font-size:.85rem;line-height:1.3}
+    .card-meta{font-size:.72rem;margin-bottom:6px}
+    .badges{gap:4px;margin-bottom:6px}
+    .badge{font-size:.62rem;padding:2px 6px}
+    .card-actions{flex-wrap:wrap;gap:4px}
+    .card-actions button{font-size:.7rem;padding:5px 6px;flex:1 1 calc(50% - 4px);min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .loan-info{font-size:.68rem;padding:4px 6px}
+  }
   
 </style>
 </head>
